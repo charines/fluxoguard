@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+pymysql
+pandas
+python-multipart
+pdfplumber
+python-dotenv
+email-validator
