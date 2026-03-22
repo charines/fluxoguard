@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Enum, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, Enum, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -8,8 +8,10 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    tipo = Column(Enum("ADMIN", "PARCEIRO", name="user_type"), default="PARCEIRO")
+    telefone = Column(String(30), nullable=True)
+    tipo = Column(Enum("SUPERADMIN", "ADMIN", "PARCEIRO", name="user_type"), default="PARCEIRO")
     cnpj_cpf = Column(String(20), unique=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     
     # Relationships
     transactions = relationship("Transaction", back_populates="parceiro")

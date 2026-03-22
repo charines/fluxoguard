@@ -20,7 +20,7 @@ if [ ! -f "$ROOT_DIR/.venv/bin/python" ]; then
     echo "❌ Erro: Ambiente virtual (.venv) não encontrado na raiz."
     exit 1
 fi
-"$ROOT_DIR/.venv/bin/python" -m uvicorn main:app --reload --port 8000 > "$ROOT_DIR/backend.log" 2>&1 &
+FRONTEND_URL="http://localhost:5175" "$ROOT_DIR/.venv/bin/python" -m uvicorn main:app --reload --port 8000 > "$ROOT_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 
 # 3. Iniciar o Frontend Vite
