@@ -1,8 +1,13 @@
 import os
+import json
+import zipfile
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -25,6 +30,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FluxoGuard API", lifespan=lifespan)
+UPLOADS_DIR = Path(__file__).resolve().parent / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+ZIPS_DIR = UPLOADS_DIR / "zips"
+ZIPS_DIR.mkdir(parents=True, exist_ok=True)
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5175")
 
@@ -99,6 +108,11 @@ def get_current_manager(current_user: User = Depends(get_current_user)) -> User:
         raise HTTPException(status_code=403, detail="Acesso restrito a ADMIN/SUPERADMIN")
     return current_user
 
+def get_current_partner(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.tipo != "PARCEIRO":
+        raise HTTPException(status_code=403, detail="Acesso restrito a PARCEIRO")
+    return current_user
+
 
 def get_current_superadmin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.tipo != "SUPERADMIN":
@@ -129,6 +143,114 @@ def can_edit_user(actor: User, target: User) -> bool:
     if actor.tipo == "ADMIN":
         return target.tipo == "PARCEIRO"
     return False
+
+def parse_json_array(raw_value: Optional[str]) -> List[str]:
+    if not raw_value:
+        return []
+    try:
+        parsed = json.loads(raw_value)
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed]
+    except Exception:
+        return []
+    return []
+
+def save_upload_files(files: List[UploadFile], subfolder: str) -> List[str]:
+    target_dir = UPLOADS_DIR / subfolder
+    target_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths: List[str] = []
+
+    for file in files:
+        extension = Path(file.filename or "").suffix
+        safe_name = f"{uuid4().hex}{extension}"
+        destination = target_dir / safe_name
+        content = file.file.read()
+        destination.write_bytes(content)
+        saved_paths.append(str(destination.relative_to(UPLOADS_DIR.parent)))
+
+    return saved_paths
+
+def is_manager(user: Optional[User]) -> bool:
+    return bool(user and user.tipo in ["ADMIN", "SUPERADMIN"])
+
+def is_locked_transaction(tx: Transaction) -> bool:
+    return tx.status in ["PAGO", "FINALIZADO"]
+
+def serialize_transaction(tx: Transaction, current_user: Optional[User] = None) -> dict:
+    comprovantes = parse_json_array(tx.comprovantes_json)
+    notas_fiscais = parse_json_array(tx.notas_fiscais_json)
+    zip_url = tx.zip_contabilidade_url
+
+    if tx.status == "FINALIZADO":
+        # After accounting closure, individual files are hidden. Finance uses ZIP.
+        comprovantes = []
+        notas_fiscais = []
+        if not is_manager(current_user):
+            zip_url = None
+
+    return {
+        "id": tx.id,
+        "user_id": tx.parceiro_id,
+        "parceiro_id": tx.parceiro_id,
+        "parceiro_nome": tx.parceiro.nome if tx.parceiro else None,
+        "ano": tx.ano,
+        "mes": tx.mes,
+        "dia": tx.dia,
+        "nome_cliente": tx.nome_cliente,
+        "valor_liberado": tx.valor_liberado,
+        "valor_ajustado": tx.valor_ajustado,
+        "status": tx.status,
+        "comprovantes": comprovantes,
+        "notas_fiscais": notas_fiscais,
+        "zip_contabilidade_url": zip_url,
+        "data_criacao": tx.data_criacao.isoformat() if tx.data_criacao else None,
+    }
+
+
+def build_zip_for_transactions(transactions: List[Transaction]) -> str:
+    if not transactions:
+        raise HTTPException(status_code=400, detail="Nenhum repasse selecionado para gerar ZIP")
+
+    zip_name = f"contabilidade_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}.zip"
+    zip_path = ZIPS_DIR / zip_name
+    uploads_root = UPLOADS_DIR.resolve()
+
+    with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+        for tx in transactions:
+            comp_paths = parse_json_array(tx.comprovantes_json)
+            nf_paths = parse_json_array(tx.notas_fiscais_json)
+            all_paths = comp_paths + nf_paths
+            for rel_path in all_paths:
+                abs_path = (UPLOADS_DIR.parent / rel_path).resolve()
+                if not str(abs_path).startswith(str(uploads_root)):
+                    continue
+                if not abs_path.exists() or not abs_path.is_file():
+                    continue
+                arcname = f"tx_{tx.id}/{abs_path.parent.name}_{abs_path.name}"
+                zip_file.write(abs_path, arcname=arcname)
+
+    return str(zip_path.relative_to(UPLOADS_DIR.parent))
+
+
+def find_transaction_by_file_path(db: Session, relative_path: str) -> Optional[Transaction]:
+    rows = db.query(Transaction).all()
+    for tx in rows:
+        if relative_path in parse_json_array(tx.comprovantes_json):
+            return tx
+        if relative_path in parse_json_array(tx.notas_fiscais_json):
+            return tx
+        if tx.zip_contabilidade_url == relative_path:
+            return tx
+    return None
+
+
+def normalize_money(value: Decimal) -> float:
+    """Normalize monetary input to 2 decimal places before persisting."""
+    try:
+        normalized = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, AttributeError):
+        raise HTTPException(status_code=422, detail="valor_liberado inválido")
+    return float(normalized)
 
 
 def find_user_for_login(identifier: str, db: Session) -> User:
@@ -188,6 +310,7 @@ def auth_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "tipo": current_user.tipo,
         "cnpj_cpf": current_user.cnpj_cpf,
+        "telefone": current_user.telefone,
         "is_active": current_user.is_active,
     }
 
@@ -312,26 +435,336 @@ def update_user(
 
 @app.get("/users", response_model=List[schemas.UserResponse])
 def list_users(
+    tipo: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_manager),
 ):
-    return db.query(User).all()
+    query = db.query(User)
+    if tipo:
+        query = query.filter(User.tipo == tipo)
+    return query.all()
+
+@app.get("/transactions")
+def list_transactions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.tipo in ["ADMIN", "SUPERADMIN"]:
+        query = db.query(Transaction)
+    elif current_user.tipo == "PARCEIRO":
+        query = db.query(Transaction).filter(
+            Transaction.parceiro_id == current_user.id,
+            Transaction.status != "ARQUIVADO",
+        )
+    else:
+        raise HTTPException(status_code=403, detail="Sem permissão para listar repasses")
+
+    rows = query.order_by(Transaction.data_criacao.desc()).all()
+    return [serialize_transaction(item, current_user) for item in rows]
+
+@app.get("/download/{file_path:path}")
+def download_file(
+    file_path: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    normalized = file_path.lstrip("/").replace("\\", "/")
+    if normalized.startswith("uploads/"):
+        normalized = normalized[len("uploads/"):]
+
+    if (
+        not normalized.startswith("comprovantes/")
+        and not normalized.startswith("notas_fiscais/")
+        and not normalized.startswith("zips/")
+    ):
+        raise HTTPException(status_code=403, detail="Caminho de arquivo inválido")
+
+    relative_path = f"uploads/{normalized}"
+    target = (UPLOADS_DIR / normalized).resolve()
+    uploads_root = UPLOADS_DIR.resolve()
+
+    if not str(target).startswith(str(uploads_root)):
+        raise HTTPException(status_code=403, detail="Caminho de arquivo inválido")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+
+    owner_tx = find_transaction_by_file_path(db, relative_path)
+    if owner_tx and owner_tx.status == "FINALIZADO" and normalized.startswith(("comprovantes/", "notas_fiscais/")):
+        raise HTTPException(status_code=403, detail="Download individual bloqueado. Use o ZIP contábil.")
+
+    if normalized.startswith("zips/"):
+        if not is_manager(current_user):
+            raise HTTPException(status_code=403, detail="Somente Financeiro pode baixar o ZIP contábil")
+        return FileResponse(path=target, filename=target.name, media_type="application/zip")
+
+    if current_user.tipo == "PARCEIRO":
+        if not owner_tx or owner_tx.parceiro_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Sem permissão para acessar este arquivo")
+
+    return FileResponse(path=target, filename=target.name, media_type="application/pdf")
 
 
-@app.post("/transactions", response_model=schemas.TransactionResponse)
-def create_transaction(transaction: schemas.TransactionCreate, db: Session = Depends(get_db)):
-    db_parceiro = db.query(User).filter(User.id == transaction.parceiro_id).first()
+@app.post("/transactions")
+async def create_transaction(
+    user_id: int = Form(...),
+    ano: int = Form(...),
+    mes: int = Form(...),
+    dia: int = Form(...),
+    nome_cliente: str = Form(...),
+    valor_liberado: Decimal = Form(...),
+    comprovantes: List[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_manager),
+):
+    if len(comprovantes) > 5:
+        raise HTTPException(status_code=400, detail="Máximo de 5 comprovantes.")
+
+    db_parceiro = db.query(User).filter(User.id == user_id, User.tipo == "PARCEIRO").first()
     if not db_parceiro:
         raise HTTPException(status_code=404, detail="Parceiro não encontrado")
 
+    valor_liberado_value = normalize_money(valor_liberado)
+    comprovantes_paths = save_upload_files(comprovantes, "comprovantes")
     new_transaction = Transaction(
-        parceiro_id=transaction.parceiro_id,
-        valor_liberado=transaction.valor_liberado,
-        valor_ajustado=transaction.valor_ajustado,
-        status=transaction.status,
-        hash_link=transaction.hash_link,
+        parceiro_id=user_id,
+        ano=ano,
+        mes=mes,
+        dia=dia,
+        nome_cliente=nome_cliente,
+        valor_liberado=valor_liberado_value,
+        valor_ajustado=valor_liberado_value,
+        status="AGUARDANDO_NF",
+        comprovantes_json=json.dumps(comprovantes_paths),
     )
     db.add(new_transaction)
     db.commit()
     db.refresh(new_transaction)
-    return new_transaction
+    return serialize_transaction(new_transaction)
+
+@app.patch("/transactions/{transaction_id}")
+async def update_transaction(
+    transaction_id: int,
+    ano: Optional[int] = Form(default=None),
+    mes: Optional[int] = Form(default=None),
+    dia: Optional[int] = Form(default=None),
+    nome_cliente: Optional[str] = Form(default=None),
+    valor_liberado: Optional[Decimal] = Form(default=None),
+    comprovantes: List[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_manager),
+):
+    tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Repasse não encontrado")
+    if is_locked_transaction(tx):
+        raise HTTPException(status_code=400, detail="Repasse bloqueado para edição neste status")
+
+    existing_files = parse_json_array(tx.comprovantes_json)
+    if len(existing_files) + len(comprovantes) > 5:
+        raise HTTPException(status_code=400, detail="Limite total de 5 comprovantes excedido.")
+
+    if len(comprovantes) > 0:
+        new_paths = save_upload_files(comprovantes, "comprovantes")
+        tx.comprovantes_json = json.dumps(existing_files + new_paths)
+
+    if ano is not None:
+        tx.ano = ano
+    if mes is not None:
+        tx.mes = mes
+    if dia is not None:
+        tx.dia = dia
+    if nome_cliente is not None:
+        tx.nome_cliente = nome_cliente
+    if valor_liberado is not None:
+        valor_liberado_value = normalize_money(valor_liberado)
+        tx.valor_liberado = valor_liberado_value
+        tx.valor_ajustado = valor_liberado_value
+
+    db.commit()
+    db.refresh(tx)
+    return serialize_transaction(tx, _)
+
+@app.get("/my-transactions")
+def my_transactions(
+    db: Session = Depends(get_db),
+    current_partner: User = Depends(get_current_partner),
+):
+    rows = (
+        db.query(Transaction)
+        .filter(
+            Transaction.parceiro_id == current_partner.id,
+            Transaction.status != "ARQUIVADO",
+        )
+        .order_by(Transaction.data_criacao.desc())
+        .all()
+    )
+    return [serialize_transaction(item, current_partner) for item in rows]
+
+@app.patch("/transactions/{transaction_id}/upload-nf")
+async def upload_nf(
+    transaction_id: int,
+    notas_fiscais: List[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+    current_partner: User = Depends(get_current_partner),
+):
+    if len(notas_fiscais) == 0:
+        raise HTTPException(status_code=400, detail="Envie ao menos 1 arquivo.")
+    if len(notas_fiscais) > 5:
+        raise HTTPException(status_code=400, detail="Máximo de 5 notas fiscais.")
+
+    for item in notas_fiscais:
+        if not (item.filename or "").lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Apenas arquivos PDF são aceitos.")
+
+    tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Repasse não encontrado")
+    if tx.parceiro_id != current_partner.id:
+        raise HTTPException(status_code=403, detail="Sem permissão para este repasse")
+    if tx.status in ["PAGO", "FINALIZADO"]:
+        raise HTTPException(status_code=400, detail="Repasse fechado para envio de NF")
+    if tx.status not in ["LIBERADO", "AGUARDANDO_NF", "DIVERGENCIA", "AGUARDANDO_APROVACAO"]:
+        raise HTTPException(status_code=400, detail="Status atual não permite envio de NF")
+
+    nf_paths = save_upload_files(notas_fiscais, "notas_fiscais")
+    tx.notas_fiscais_json = json.dumps(nf_paths)
+    tx.status = "AGUARDANDO_APROVACAO"
+    db.commit()
+    db.refresh(tx)
+    return serialize_transaction(tx, current_partner)
+
+
+@app.patch("/transactions/{transaction_id}/reject")
+def reject_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager),
+):
+    tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Repasse não encontrado")
+    if tx.status in ["PAGO", "FINALIZADO"]:
+        raise HTTPException(status_code=400, detail="Repasse já está em estágio final")
+    if tx.status != "AGUARDANDO_APROVACAO":
+        raise HTTPException(status_code=400, detail="Somente repasses aguardando aprovação podem ser recusados")
+
+    tx.status = "DIVERGENCIA"
+    db.commit()
+    db.refresh(tx)
+    return serialize_transaction(tx, current_user)
+
+
+@app.patch("/transactions/batch/approve-payment")
+async def approve_payment_batch(
+    transaction_ids: str = Form(...),
+    comprovantes: List[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager),
+):
+    try:
+        ids = [int(item) for item in json.loads(transaction_ids)]
+    except Exception:
+        raise HTTPException(status_code=400, detail="transaction_ids inválido")
+
+    if not ids:
+        raise HTTPException(status_code=400, detail="Selecione ao menos um repasse")
+    if len(comprovantes) == 0:
+        raise HTTPException(status_code=400, detail="Envie ao menos 1 comprovante para aprovação")
+    if len(comprovantes) > 5:
+        raise HTTPException(status_code=400, detail="Máximo de 5 comprovantes por aprovação em massa")
+
+    rows = db.query(Transaction).filter(Transaction.id.in_(ids)).all()
+    if len(rows) != len(set(ids)):
+        raise HTTPException(status_code=404, detail="Um ou mais repasses não foram encontrados")
+
+    new_comp_paths = save_upload_files(comprovantes, "comprovantes")
+    for tx in rows:
+        if tx.status not in ["AGUARDANDO_APROVACAO", "DIVERGENCIA", "AGUARDANDO_NF", "LIBERADO"]:
+            raise HTTPException(status_code=400, detail=f"Repasse {tx.id} não pode ser aprovado no status atual")
+        if tx.status == "FINALIZADO":
+            raise HTTPException(status_code=400, detail=f"Repasse {tx.id} já foi finalizado")
+
+        existing_comp = parse_json_array(tx.comprovantes_json)
+        merged = existing_comp + new_comp_paths
+        if len(merged) > 5:
+            raise HTTPException(status_code=400, detail=f"Repasse {tx.id} excede o limite de 5 comprovantes")
+        tx.comprovantes_json = json.dumps(merged)
+        tx.status = "PAGO"
+
+    db.commit()
+    for tx in rows:
+        db.refresh(tx)
+    return [serialize_transaction(tx, current_user) for tx in rows]
+
+
+@app.patch("/transactions/batch/finalize")
+def finalize_transactions_batch(
+    payload: schemas.TransactionBatchActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager),
+):
+    ids = list(set(payload.transaction_ids))
+    if not ids:
+        raise HTTPException(status_code=400, detail="Selecione ao menos um repasse para finalizar")
+
+    rows = db.query(Transaction).filter(Transaction.id.in_(ids)).all()
+    if len(rows) != len(ids):
+        raise HTTPException(status_code=404, detail="Um ou mais repasses não foram encontrados")
+
+    for tx in rows:
+        if tx.status != "PAGO":
+            raise HTTPException(status_code=400, detail=f"Repasse {tx.id} deve estar em PAGO para finalizar")
+
+    zip_path = build_zip_for_transactions(rows)
+    for tx in rows:
+        tx.status = "FINALIZADO"
+        tx.zip_contabilidade_url = zip_path
+
+    db.commit()
+    for tx in rows:
+        db.refresh(tx)
+    return [serialize_transaction(tx, current_user) for tx in rows]
+
+
+@app.delete("/transactions/{transaction_id}/files")
+def remove_transaction_file(
+    transaction_id: int,
+    payload: schemas.TransactionFileRemoveRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager),
+):
+    tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Repasse não encontrado")
+    if is_locked_transaction(tx):
+        raise HTTPException(status_code=400, detail="Não é possível remover arquivos em repasses pagos/finalizados")
+
+    file_type = payload.file_type.strip().upper()
+    if file_type not in ["NF", "COMPROVANTE"]:
+        raise HTTPException(status_code=400, detail="file_type deve ser NF ou COMPROVANTE")
+
+    relative_path = payload.file_path.strip().lstrip("/")
+    if file_type == "NF":
+        files = parse_json_array(tx.notas_fiscais_json)
+    else:
+        files = parse_json_array(tx.comprovantes_json)
+
+    if relative_path not in files:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado neste repasse")
+
+    files = [item for item in files if item != relative_path]
+    if file_type == "NF":
+        tx.notas_fiscais_json = json.dumps(files)
+    else:
+        tx.comprovantes_json = json.dumps(files)
+
+    abs_path = (UPLOADS_DIR.parent / relative_path).resolve()
+    if str(abs_path).startswith(str(UPLOADS_DIR.resolve())) and abs_path.exists() and abs_path.is_file():
+        try:
+            abs_path.unlink()
+        except Exception:
+            pass
+
+    db.commit()
+    db.refresh(tx)
+    return serialize_transaction(tx, current_user)

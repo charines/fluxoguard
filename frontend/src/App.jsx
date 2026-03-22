@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { getUsers, login, updateUser, updateUserActive } from './api'
+import { createRepasse, getUsers, getUsersByType, login, updateUser, updateUserActive } from './api'
 import { LayoutDashboard, LogIn, ShieldCheck, Users } from 'lucide-react'
 import AdminRegister from './AdminRegister'
+import RepasseList from './RepasseList'
 
 const getLoggedUser = () => {
   const rawUser = localStorage.getItem('fluxoguard_admin_user')
@@ -40,6 +41,22 @@ const canEditTarget = (loggedUser, targetUser) => {
   return false
 }
 
+const currencyInputFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+})
+
+const formatCurrencyFromDigits = (digits) => {
+  if (!digits) return ''
+  const value = Number(digits) / 100
+  return currencyInputFormatter.format(value)
+}
+
+const digitsToDecimalString = (digits) => {
+  if (!digits) return ''
+  return (Number(digits) / 100).toFixed(2)
+}
+
 const DashboardLayout = ({ title, children }) => {
   const navigate = useNavigate()
   const user = getLoggedUser()
@@ -58,6 +75,16 @@ const DashboardLayout = ({ title, children }) => {
           <Link to="/admin/dashboard" className="flex items-center gap-3 hover:text-blue-300 transition-colors">
             <LayoutDashboard size={20} /> Dashboard
           </Link>
+          {(user?.tipo === 'ADMIN' || user?.tipo === 'SUPERADMIN') && (
+            <Link to="/admin/repasses/new" className="flex items-center gap-3 hover:text-blue-300 transition-colors">
+              <Users size={20} /> Novo Repasse
+            </Link>
+          )}
+          {(user?.tipo === 'ADMIN' || user?.tipo === 'SUPERADMIN') && (
+            <Link to="/admin/repasses" className="flex items-center gap-3 hover:text-blue-300 transition-colors">
+              <Users size={20} /> Histórico Repasses
+            </Link>
+          )}
           {user?.tipo === 'SUPERADMIN' && (
             <Link to="/admin/manage?scope=admins" className="flex items-center gap-3 hover:text-blue-300 transition-colors">
               <ShieldCheck size={20} /> Gerenciar Admins
@@ -66,6 +93,11 @@ const DashboardLayout = ({ title, children }) => {
           {(user?.tipo === 'ADMIN' || user?.tipo === 'SUPERADMIN') && (
             <Link to="/admin/manage?scope=partners" className="flex items-center gap-3 hover:text-blue-300 transition-colors">
               <Users size={20} /> Gerenciar Parceiros
+            </Link>
+          )}
+          {user?.tipo === 'PARCEIRO' && (
+            <Link to="/partner/transactions" className="flex items-center gap-3 hover:text-blue-300 transition-colors">
+              <Users size={20} /> Meus Repasses
             </Link>
           )}
           <button
@@ -114,7 +146,11 @@ const UnifiedLogin = () => {
 
       localStorage.setItem('fluxoguard_admin_token', data.access_token)
       localStorage.setItem('fluxoguard_admin_user', JSON.stringify(data.user))
-      navigate('/admin/dashboard')
+      if (data.user.tipo === 'PARCEIRO') {
+        navigate('/partner/transactions')
+      } else {
+        navigate('/admin/dashboard')
+      }
     } catch (err) {
       setError(err?.response?.data?.detail || 'Falha no login.')
     } finally {
@@ -161,19 +197,14 @@ const UnifiedLogin = () => {
 const AdminDashboard = () => {
   const navigate = useNavigate()
   const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const loggedUser = getLoggedUser()
 
   const loadUsers = async () => {
     try {
       const data = await getUsers()
       setUsers(data)
-      setError(null)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Erro ao carregar usuários.')
-    } finally {
-      setLoading(false)
+      console.error(err?.response?.data?.detail || 'Erro ao carregar usuários.')
     }
   }
 
@@ -185,19 +216,6 @@ const AdminDashboard = () => {
     }
     loadUsers()
   }, [navigate])
-
-  const handleToggle = async (target) => {
-    try {
-      const updated = await updateUserActive(target.id, !target.is_active)
-      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
-    } catch (err) {
-      alert(err?.response?.data?.detail || 'Erro ao atualizar status do usuário.')
-    }
-  }
-
-  const handleEdit = async (target) => {
-    navigate(`/admin/edit/${target.id}`)
-  }
 
   return (
     <DashboardLayout title="Dashboard Administrativa">
@@ -220,6 +238,11 @@ const AdminDashboard = () => {
             )}
             {(loggedUser?.tipo === 'ADMIN' || loggedUser?.tipo === 'SUPERADMIN') && (
               <div>
+                <Link className="text-blue-700 hover:underline" to="/admin/users">Usuários Cadastrados</Link>
+              </div>
+            )}
+            {(loggedUser?.tipo === 'ADMIN' || loggedUser?.tipo === 'SUPERADMIN') && (
+              <div>
                 <Link className="text-blue-700 hover:underline" to="/admin/manage?scope=partners">Gerenciar Parceiros</Link>
               </div>
             )}
@@ -227,6 +250,58 @@ const AdminDashboard = () => {
         </div>
       </div>
 
+      <RepasseList />
+    </DashboardLayout>
+  )
+}
+
+const AdminUsersPage = () => {
+  const navigate = useNavigate()
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const loggedUser = getLoggedUser()
+
+  const loadUsers = async () => {
+    try {
+      const data = await getUsers()
+      setUsers(data)
+      setError(null)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Erro ao carregar usuários.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const token = localStorage.getItem('fluxoguard_admin_token')
+    if (!token || !loggedUser) {
+      navigate('/')
+      return
+    }
+    if (!(loggedUser.tipo === 'ADMIN' || loggedUser.tipo === 'SUPERADMIN')) {
+      navigate('/admin/dashboard')
+      return
+    }
+    loadUsers()
+  }, [navigate])
+
+  const handleToggle = async (target) => {
+    try {
+      const updated = await updateUserActive(target.id, !target.is_active)
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Erro ao atualizar status do usuário.')
+    }
+  }
+
+  const handleEdit = async (target) => {
+    navigate(`/admin/edit/${target.id}`)
+  }
+
+  return (
+    <DashboardLayout title="Usuários Cadastrados">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
           <h3 className="font-semibold text-gray-800">Usuários Cadastrados</h3>
@@ -301,6 +376,257 @@ const AdminDashboard = () => {
           </div>
         )}
       </div>
+    </DashboardLayout>
+  )
+}
+
+const NewRepassePage = () => {
+  const navigate = useNavigate()
+  const loggedUser = getLoggedUser()
+
+  const [partners, setPartners] = useState([])
+  const [userId, setUserId] = useState('')
+  const [dataRef, setDataRef] = useState('')
+  const [ano, setAno] = useState('')
+  const [mes, setMes] = useState('')
+  const [dia, setDia] = useState('')
+  const [nomeCliente, setNomeCliente] = useState('')
+  const [valorLiberado, setValorLiberado] = useState('')
+  const [files, setFiles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const token = localStorage.getItem('fluxoguard_admin_token')
+    if (!token || !loggedUser) {
+      navigate('/')
+      return
+    }
+    if (!(loggedUser.tipo === 'ADMIN' || loggedUser.tipo === 'SUPERADMIN')) {
+      navigate('/admin/dashboard')
+      return
+    }
+
+    const loadPartners = async () => {
+      try {
+        const data = await getUsersByType('PARCEIRO')
+        setPartners(data)
+        if (data.length > 0) setUserId(String(data[0].id))
+      } catch (err) {
+        alert(err?.response?.data?.detail || 'Erro ao carregar parceiros.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadPartners()
+  }, [navigate])
+
+  const handleFileChange = (event) => {
+    const selected = Array.from(event.target.files || [])
+    if (selected.length > 5) {
+      alert('Máximo de 5 comprovantes.')
+      setFiles([])
+      return
+    }
+    setFiles(selected)
+  }
+
+  const handleDateChange = (value) => {
+    setDataRef(value)
+    if (!value) {
+      setAno('')
+      setMes('')
+      setDia('')
+      return
+    }
+    if (value.includes('-')) {
+      const [y, m, d] = value.split('-')
+      setAno(y || '')
+      setMes(m || '')
+      setDia(d || '')
+      return
+    }
+    if (value.includes('/')) {
+      const [d, m, y] = value.split('/')
+      setAno(y || '')
+      setMes(m || '')
+      setDia(d || '')
+      return
+    }
+    setAno('')
+    setMes('')
+    setDia('')
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (files.length > 5) {
+      alert('Máximo de 5 comprovantes.')
+      return
+    }
+    if (!userId || !ano || !mes || !dia || !nomeCliente.trim() || !valorLiberado) {
+      alert('Preencha todos os campos obrigatórios.')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('user_id', userId)
+    formData.append('ano', ano)
+    formData.append('mes', mes)
+    formData.append('dia', dia)
+    formData.append('nome_cliente', nomeCliente.trim())
+    formData.append('valor_liberado', digitsToDecimalString(valorLiberado))
+    files.forEach((file) => formData.append('comprovantes', file))
+
+    setSaving(true)
+    try {
+      await createRepasse(formData)
+      alert('Repasse criado com sucesso (status AGUARDANDO_NF).')
+      navigate('/admin/dashboard')
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Erro ao criar repasse.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <DashboardLayout title="Novo Repasse">
+      {loading ? (
+        <div className="bg-white border border-gray-200 rounded-lg p-6">Carregando parceiros...</div>
+      ) : (
+        <div className="flex items-center justify-center p-4">
+          <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg p-6 w-full max-w-2xl">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900">Novo Repasse</h2>
+
+            <label className="block text-sm text-gray-700 mb-1">Parceiro</label>
+            <select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
+            >
+              {partners.map((p) => (
+                <option key={p.id} value={p.id}>{p.nome} ({p.cnpj_cpf})</option>
+              ))}
+            </select>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div className="md:col-span-3">
+                <label className="block text-sm text-gray-700 mb-1">Data do Repasse</label>
+                <input
+                  type="date"
+                  value={dataRef}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Ano</label>
+                <div className="w-full border border-gray-200 rounded px-3 py-2 bg-gray-50 text-gray-700">
+                  {ano || '--'}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Mês</label>
+                <div className="w-full border border-gray-200 rounded px-3 py-2 bg-gray-50 text-gray-700">
+                  {mes || '--'}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Dia</label>
+                <div className="w-full border border-gray-200 rounded px-3 py-2 bg-gray-50 text-gray-700">
+                  {dia || '--'}
+                </div>
+              </div>
+            </div>
+
+            <label className="block text-sm text-gray-700 mb-1">Nome do Cliente</label>
+            <input
+              type="text"
+              value={nomeCliente}
+              onChange={(e) => setNomeCliente(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
+            />
+
+            <label className="block text-sm text-gray-700 mb-1">Valor Liberado</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={formatCurrencyFromDigits(valorLiberado)}
+              onChange={(e) => {
+                const onlyDigits = e.target.value.replace(/\D/g, '')
+                setValorLiberado(onlyDigits)
+              }}
+              placeholder="R$ 0,00"
+              className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
+            />
+
+            <label className="block text-sm text-gray-700 mb-1">Comprovantes (até 5 arquivos)</label>
+            <input
+              type="file"
+              multiple
+              onChange={handleFileChange}
+              className="w-full border border-gray-300 rounded px-3 py-2 mb-2"
+            />
+            <div className="text-xs text-gray-500 mb-5">{files.length} arquivo(s) selecionado(s).</div>
+
+            <button
+              type="submit"
+              disabled={saving || files.length > 5}
+              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70"
+            >
+              {saving ? 'Salvando...' : 'Salvar Repasse'}
+            </button>
+          </form>
+        </div>
+      )}
+    </DashboardLayout>
+  )
+}
+
+const RepasseListPage = () => {
+  const navigate = useNavigate()
+  const loggedUser = getLoggedUser()
+
+  useEffect(() => {
+    const token = localStorage.getItem('fluxoguard_admin_token')
+    if (!token || !loggedUser) {
+      navigate('/')
+      return
+    }
+    if (!(loggedUser.tipo === 'ADMIN' || loggedUser.tipo === 'SUPERADMIN')) {
+      navigate('/admin/dashboard')
+      return
+    }
+  }, [navigate])
+
+  return (
+    <DashboardLayout title="Histórico de Repasses">
+      <RepasseList />
+    </DashboardLayout>
+  )
+}
+
+const PartnerTransactionsPage = () => {
+  const navigate = useNavigate()
+  const loggedUser = getLoggedUser()
+
+  useEffect(() => {
+    const token = localStorage.getItem('fluxoguard_admin_token')
+    if (!token || !loggedUser) {
+      navigate('/')
+      return
+    }
+    if (loggedUser.tipo !== 'PARCEIRO') {
+      navigate('/admin/dashboard')
+      return
+    }
+  }, [navigate])
+
+  return (
+    <DashboardLayout title="Meus Repasses">
+      <RepasseList />
     </DashboardLayout>
   )
 }
@@ -476,7 +802,11 @@ function App() {
       <Routes>
         <Route path="/" element={<UnifiedLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/admin/manage" element={<ManageUsersPage />} />
+        <Route path="/admin/repasses/new" element={<NewRepassePage />} />
+        <Route path="/admin/repasses" element={<RepasseListPage />} />
+        <Route path="/partner/transactions" element={<PartnerTransactionsPage />} />
         <Route path="/admin/edit/:userId" element={<EditUserPage />} />
       </Routes>
     </BrowserRouter>

@@ -18,6 +18,14 @@ export const getUsers = async () => {
   return response.data;
 };
 
+export const getUsersByType = async (tipo) => {
+  const response = await api.get('/users', {
+    headers: getAuthHeaders(),
+    params: { tipo },
+  });
+  return response.data;
+};
+
 export const createTransaction = async (data) => {
   const response = await api.post('/transactions', data);
   return response.data;
@@ -56,6 +64,105 @@ export const updateUserActive = async (userId, isActive) => {
 export const updateUser = async (userId, payload) => {
   const response = await api.patch(`/users/${userId}`, payload, {
     headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
+export const createRepasse = async (formData) => {
+  const response = await api.post('/transactions', formData, {
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const getTransactions = async () => {
+  const response = await api.get('/transactions', {
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
+export const updateRepasse = async (transactionId, formData) => {
+  const response = await api.patch(`/transactions/${transactionId}`, formData, {
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const getMyTransactions = async () => {
+  const response = await api.get('/my-transactions', {
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
+export const uploadNotasFiscais = async (transactionId, files) => {
+  const formData = new FormData();
+  files.forEach((file) => formData.append('notas_fiscais', file));
+
+  const response = await api.patch(`/transactions/${transactionId}/upload-nf`, formData, {
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const rejectTransaction = async (transactionId) => {
+  const response = await api.patch(`/transactions/${transactionId}/reject`, null, {
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
+export const approvePaymentBatch = async (transactionIds, files) => {
+  const formData = new FormData();
+  formData.append('transaction_ids', JSON.stringify(transactionIds));
+  files.forEach((file) => formData.append('comprovantes', file));
+
+  const response = await api.patch('/transactions/batch/approve-payment', formData, {
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const finalizeTransactionsBatch = async (transactionIds) => {
+  const response = await api.patch(
+    '/transactions/batch/finalize',
+    { transaction_ids: transactionIds },
+    { headers: getAuthHeaders() }
+  );
+  return response.data;
+};
+
+export const removeTransactionFile = async (transactionId, fileType, filePath) => {
+  const response = await api.delete(`/transactions/${transactionId}/files`, {
+    headers: getAuthHeaders(),
+    data: { file_type: fileType, file_path: filePath },
+  });
+  return response.data;
+};
+
+const buildDownloadPath = (filePath) => {
+  const normalized = String(filePath || '').replace(/^\/+/, '');
+  const encoded = normalized.split('/').map(encodeURIComponent).join('/');
+  return `/download/${encoded}`;
+};
+
+export const downloadFile = async (filePath) => {
+  const response = await api.get(buildDownloadPath(filePath), {
+    headers: getAuthHeaders(),
+    responseType: 'blob',
   });
   return response.data;
 };

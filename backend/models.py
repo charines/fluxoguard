@@ -21,10 +21,31 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True, index=True)
     parceiro_id = Column(Integer, ForeignKey("users.id"))
+    ano = Column(Integer, nullable=True)
+    mes = Column(Integer, nullable=True)
+    dia = Column(Integer, nullable=True)
+    nome_cliente = Column(String(255), nullable=True)
     valor_liberado = Column(Float, default=0.0)
     valor_ajustado = Column(Float, default=0.0)
-    status = Column(Enum("PENDENTE", "AGUARDANDO_NF", "PAGO", "ARQUIVADO", name="transaction_status"), default="PENDENTE")
+    status = Column(
+        Enum(
+            "PENDENTE",
+            "LIBERADO",
+            "AGUARDANDO_NF",
+            "AGUARDANDO_APROVACAO",
+            "DIVERGENCIA",
+            "CONFERENCIA",
+            "PAGO",
+            "FINALIZADO",
+            "ARQUIVADO",
+            name="transaction_status",
+        ),
+        default="PENDENTE",
+    )
     hash_link = Column(String(255), unique=True)
+    comprovantes_json = Column(String(5000), nullable=True)
+    notas_fiscais_json = Column(String(5000), nullable=True)
+    zip_contabilidade_url = Column(String(1024), nullable=True)
     data_criacao = Column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships

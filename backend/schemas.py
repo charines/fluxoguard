@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from decimal import Decimal
 
 # Enums matching models.py
 class UserType(str, Enum):
@@ -11,8 +12,13 @@ class UserType(str, Enum):
 
 class TransactionStatus(str, Enum):
     PENDENTE = "PENDENTE"
+    LIBERADO = "LIBERADO"
     AGUARDANDO_NF = "AGUARDANDO_NF"
+    AGUARDANDO_APROVACAO = "AGUARDANDO_APROVACAO"
+    DIVERGENCIA = "DIVERGENCIA"
+    CONFERENCIA = "CONFERENCIA"
     PAGO = "PAGO"
+    FINALIZADO = "FINALIZADO"
     ARQUIVADO = "ARQUIVADO"
 
 # User Schemas
@@ -69,13 +75,26 @@ class UserResponse(UserBase):
 # Transaction Schemas
 class TransactionBase(BaseModel):
     parceiro_id: int
-    valor_liberado: float = 0.0
-    valor_ajustado: float = 0.0
+    ano: int
+    mes: int
+    dia: int
+    nome_cliente: str
+    valor_liberado: Decimal = Field(default=Decimal("0.00"))
+    valor_ajustado: Decimal = Field(default=Decimal("0.00"))
     status: TransactionStatus = TransactionStatus.PENDENTE
     hash_link: Optional[str] = None
+    comprovantes: List[str] = Field(default_factory=list)
+    notas_fiscais: List[str] = Field(default_factory=list)
+    zip_contabilidade_url: Optional[str] = None
+    parceiro_nome: Optional[str] = None
 
 class TransactionCreate(TransactionBase):
-    pass
+    parceiro_id: int
+    ano: int
+    mes: int
+    dia: int
+    nome_cliente: str
+    valor_liberado: Decimal
 
 class TransactionResponse(TransactionBase):
     id: int
@@ -83,3 +102,12 @@ class TransactionResponse(TransactionBase):
 
     class Config:
         from_attributes = True
+
+
+class TransactionBatchActionRequest(BaseModel):
+    transaction_ids: List[int]
+
+
+class TransactionFileRemoveRequest(BaseModel):
+    file_type: str
+    file_path: str
