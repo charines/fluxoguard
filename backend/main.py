@@ -533,7 +533,7 @@ async def create_transaction(
         nome_cliente=nome_cliente,
         valor_liberado=valor_liberado_value,
         valor_ajustado=valor_liberado_value,
-        status="AGUARDANDO_NF",
+        status="PAGO" if len(comprovantes_paths) > 0 else "AGUARDANDO_NF",
         comprovantes_json=json.dumps(comprovantes_paths),
     )
     db.add(new_transaction)
@@ -651,6 +651,36 @@ def reject_transaction(
         raise HTTPException(status_code=400, detail="Somente repasses aguardando aprovação podem ser recusados")
 
     tx.status = "DIVERGENCIA"
+    db.commit()
+    db.refresh(tx)
+    return serialize_transaction(tx, current_user)
+
+
+VALID_ADMIN_STATUSES = [
+    "AGUARDANDO_NF",
+    "AGUARDANDO_APROVACAO",
+    "DIVERGENCIA",
+    "PAGO",
+    "FINALIZADO",
+]
+
+
+@app.patch("/transactions/{transaction_id}/change-status")
+def change_transaction_status(
+    transaction_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager),
+):
+    new_status = payload.get("status", "").strip().upper()
+    if new_status not in VALID_ADMIN_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Status inválido: {new_status}")
+
+    tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Repasse não encontrado")
+
+    tx.status = new_status
     db.commit()
     db.refresh(tx)
     return serialize_transaction(tx, current_user)

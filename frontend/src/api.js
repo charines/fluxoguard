@@ -115,6 +115,13 @@ export const uploadNotasFiscais = async (transactionId, files) => {
   return response.data;
 };
 
+export const changeTransactionStatus = async (transactionId, status) => {
+  const response = await api.patch(`/transactions/${transactionId}/change-status`, { status }, {
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
 export const rejectTransaction = async (transactionId) => {
   const response = await api.patch(`/transactions/${transactionId}/reject`, null, {
     headers: getAuthHeaders(),

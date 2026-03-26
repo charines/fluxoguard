@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2 } from 'lucide-react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
+import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check } from 'lucide-react'
 import {
+  changeTransactionStatus,
   downloadFile,
   finalizeTransactionsBatch,
   getTransactions,
@@ -70,6 +71,29 @@ const RepasseList = () => {
 
   const [selectedMap, setSelectedMap] = useState({})
   const [processingBatch, setProcessingBatch] = useState(false)
+  const [statusMenuOpen, setStatusMenuOpen] = useState(null) // tx.id or null
+
+  const STATUS_OPTIONS = [
+    { value: 'AGUARDANDO_NF', label: 'Aguardando NF' },
+    { value: 'AGUARDANDO_APROVACAO', label: 'Aprovação' },
+    { value: 'DIVERGENCIA', label: 'Divergência' },
+    { value: 'PAGO', label: 'Pago' },
+    { value: 'FINALIZADO', label: 'Finalizado' },
+  ]
+
+  const handleChangeStatus = async (tx, newStatus) => {
+    if (tx.status === newStatus) {
+      setStatusMenuOpen(null)
+      return
+    }
+    try {
+      const updated = await changeTransactionStatus(tx.id, newStatus)
+      setRows((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Erro ao alterar status.')
+    }
+    setStatusMenuOpen(null)
+  }
 
   const loadRows = async () => {
     try {
@@ -508,7 +532,7 @@ const RepasseList = () => {
                   <th className="px-6 py-3">Status</th>
                   <th className="px-6 py-3">Nota Fiscal</th>
                   <th className="px-6 py-3">Comprovante</th>
-                  {isAdmin && <th className="px-6 py-3 text-right">Ação</th>}
+                  {isAdmin && <th className="px-6 py-3 text-center">Ações</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50 text-foreground">
@@ -551,23 +575,38 @@ const RepasseList = () => {
                         <FileCell tx={tx} type="COMPROVANTE" />
                       </td>
                       {isAdmin && (
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {tx.status !== 'FINALIZADO' && (
-                              <button
-                                onClick={() => openEdit(tx)}
-                                className="text-xs font-medium px-3 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors text-foreground"
-                              >
-                                Editar
-                              </button>
-                            )}
-                            {tx.status === 'AGUARDANDO_APROVACAO' && (
-                              <button
-                                onClick={() => handleReject(tx)}
-                                className="text-xs font-medium px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
-                              >
-                                Recusar
-                              </button>
+                        <td className="px-6 py-4 text-center">
+                          <div className="relative inline-block">
+                            <button
+                              onClick={() => setStatusMenuOpen(statusMenuOpen === tx.id ? null : tx.id)}
+                              className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                            >
+                              <MoreHorizontal className="w-5 h-5" />
+                            </button>
+                            {statusMenuOpen === tx.id && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setStatusMenuOpen(null)} />
+                                <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-lg shadow-xl z-50 py-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                                  {STATUS_OPTIONS.map((opt) => (
+                                    <button
+                                      key={opt.value}
+                                      onClick={() => handleChangeStatus(tx, opt.value)}
+                                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                                        tx.status === opt.value
+                                          ? 'bg-primary/10 text-primary font-semibold'
+                                          : 'text-foreground hover:bg-muted'
+                                      }`}
+                                    >
+                                      {tx.status === opt.value ? (
+                                        <Check className="w-4 h-4 text-primary" />
+                                      ) : (
+                                        <span className="w-4" />
+                                      )}
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
                             )}
                           </div>
                         </td>
