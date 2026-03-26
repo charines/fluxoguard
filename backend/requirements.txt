@@ -7,3 +7,4 @@ python-multipart
 pdfplumber
 python-dotenv
 email-validator
+supabase

@@ -60,3 +60,13 @@ class AuthToken(Base):
 
     # Relationships
     user = relationship("User", back_populates="auth_tokens")
+
+class NotaFiscal(Base):
+    __tablename__ = "notas_fiscais_supabase"
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"))
+    path = Column(String(500), nullable=False)
+    data_upload = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Optional: Relationship with Transaction
+    transaction = relationship("Transaction")

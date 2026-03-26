@@ -1,6 +1,7 @@
 import os
 import json
 import zipfile
+import io
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from database import engine, Base, get_db
-from models import User, Transaction, AuthToken
+from models import User, Transaction, AuthToken, NotaFiscal
 import schemas
 
 from contextlib import asynccontextmanager
@@ -155,19 +156,15 @@ def parse_json_array(raw_value: Optional[str]) -> List[str]:
         return []
     return []
 
-def save_upload_files(files: List[UploadFile], subfolder: str) -> List[str]:
-    target_dir = UPLOADS_DIR / subfolder
-    target_dir.mkdir(parents=True, exist_ok=True)
+from supabase_service import upload_file_to_supabase, gerar_link_signed, delete_file_from_supabase, download_file_from_supabase, upload_bytes_to_supabase
+
+async def save_upload_files_supabase(files: List[UploadFile], subfolder: str) -> List[str]:
     saved_paths: List[str] = []
-
     for file in files:
-        extension = Path(file.filename or "").suffix
-        safe_name = f"{uuid4().hex}{extension}"
-        destination = target_dir / safe_name
-        content = file.file.read()
-        destination.write_bytes(content)
-        saved_paths.append(str(destination.relative_to(UPLOADS_DIR.parent)))
-
+        if not file.filename:
+            continue
+        path = await upload_file_to_supabase(file, subfolder)
+        saved_paths.append(path)
     return saved_paths
 
 def is_manager(user: Optional[User]) -> bool:
@@ -200,9 +197,9 @@ def serialize_transaction(tx: Transaction, current_user: Optional[User] = None) 
         "valor_liberado": tx.valor_liberado,
         "valor_ajustado": tx.valor_ajustado,
         "status": tx.status,
-        "comprovantes": comprovantes,
-        "notas_fiscais": notas_fiscais,
-        "zip_contabilidade_url": zip_url,
+        "comprovantes": [gerar_link_signed(p) for p in comprovantes],
+        "notas_fiscais": [gerar_link_signed(p) for p in notas_fiscais],
+        "zip_contabilidade_url": gerar_link_signed(zip_url) if zip_url else None,
         "data_criacao": tx.data_criacao.isoformat() if tx.data_criacao else None,
     }
 
@@ -211,25 +208,32 @@ def build_zip_for_transactions(transactions: List[Transaction]) -> str:
     if not transactions:
         raise HTTPException(status_code=400, detail="Nenhum repasse selecionado para gerar ZIP")
 
-    zip_name = f"contabilidade_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}.zip"
-    zip_path = ZIPS_DIR / zip_name
-    uploads_root = UPLOADS_DIR.resolve()
-
-    with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
         for tx in transactions:
             comp_paths = parse_json_array(tx.comprovantes_json)
             nf_paths = parse_json_array(tx.notas_fiscais_json)
             all_paths = comp_paths + nf_paths
+            
             for rel_path in all_paths:
-                abs_path = (UPLOADS_DIR.parent / rel_path).resolve()
-                if not str(abs_path).startswith(str(uploads_root)):
-                    continue
-                if not abs_path.exists() or not abs_path.is_file():
-                    continue
-                arcname = f"tx_{tx.id}/{abs_path.parent.name}_{abs_path.name}"
-                zip_file.write(abs_path, arcname=arcname)
+                file_content = download_file_from_supabase(rel_path)
+                
+                if file_content:
+                    filename = os.path.basename(rel_path)
+                    folder = os.path.dirname(rel_path)
+                    arcname = f"tx_{tx.id}/{folder}_{filename}"
+                    zip_file.writestr(arcname, file_content)
 
-    return str(zip_path.relative_to(UPLOADS_DIR.parent))
+    # Get bytes from buffer
+    zip_data = zip_buffer.getvalue()
+    zip_buffer.close()
+    
+    # Upload to Supabase
+    zip_filename = f"contabilidade_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}.zip"
+    supabase_path = upload_bytes_to_supabase(zip_data, zip_filename, "zips")
+
+    return supabase_path
 
 
 def find_transaction_by_file_path(db: Session, relative_path: str) -> Optional[Transaction]:
@@ -479,29 +483,19 @@ def download_file(
     ):
         raise HTTPException(status_code=403, detail="Caminho de arquivo inválido")
 
-    relative_path = f"uploads/{normalized}"
+    # First check if it's in Supabase (preferred)
+    storage_path = normalized
+    signed_url = gerar_link_signed(storage_path)
+    if signed_url and signed_url.startswith("http"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=signed_url)
+
+    # Fallback to local (if any files remain)
     target = (UPLOADS_DIR / normalized).resolve()
-    uploads_root = UPLOADS_DIR.resolve()
-
-    if not str(target).startswith(str(uploads_root)):
-        raise HTTPException(status_code=403, detail="Caminho de arquivo inválido")
-    if not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
-
-    owner_tx = find_transaction_by_file_path(db, relative_path)
-    if owner_tx and owner_tx.status == "FINALIZADO" and normalized.startswith(("comprovantes/", "notas_fiscais/")):
-        raise HTTPException(status_code=403, detail="Download individual bloqueado. Use o ZIP contábil.")
-
-    if normalized.startswith("zips/"):
-        if not is_manager(current_user):
-            raise HTTPException(status_code=403, detail="Somente Financeiro pode baixar o ZIP contábil")
-        return FileResponse(path=target, filename=target.name, media_type="application/zip")
-
-    if current_user.tipo == "PARCEIRO":
-        if not owner_tx or owner_tx.parceiro_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Sem permissão para acessar este arquivo")
-
-    return FileResponse(path=target, filename=target.name, media_type="application/pdf")
+    if target.exists() and target.is_file():
+         return FileResponse(path=target, filename=target.name, media_type="application/pdf")
+    
+    raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
 
 @app.post("/transactions")
@@ -524,7 +518,7 @@ async def create_transaction(
         raise HTTPException(status_code=404, detail="Parceiro não encontrado")
 
     valor_liberado_value = normalize_money(valor_liberado)
-    comprovantes_paths = save_upload_files(comprovantes, "comprovantes")
+    comprovantes_paths = await save_upload_files_supabase(comprovantes, "comprovantes")
     new_transaction = Transaction(
         parceiro_id=user_id,
         ano=ano,
@@ -564,7 +558,7 @@ async def update_transaction(
         raise HTTPException(status_code=400, detail="Limite total de 5 comprovantes excedido.")
 
     if len(comprovantes) > 0:
-        new_paths = save_upload_files(comprovantes, "comprovantes")
+        new_paths = await save_upload_files_supabase(comprovantes, "comprovantes")
         tx.comprovantes_json = json.dumps(existing_files + new_paths)
         if tx.status not in ["FINALIZADO"]:
             tx.status = "PAGO"
@@ -628,7 +622,7 @@ async def upload_nf(
     if tx.status not in ["LIBERADO", "AGUARDANDO_NF", "DIVERGENCIA", "AGUARDANDO_APROVACAO"]:
         raise HTTPException(status_code=400, detail="Status atual não permite envio de NF")
 
-    nf_paths = save_upload_files(notas_fiscais, "notas_fiscais")
+    nf_paths = await save_upload_files_supabase(notas_fiscais, "notas_fiscais")
     tx.notas_fiscais_json = json.dumps(nf_paths)
     tx.status = "AGUARDANDO_APROVACAO"
     db.commit()
@@ -709,7 +703,7 @@ async def approve_payment_batch(
     if len(rows) != len(set(ids)):
         raise HTTPException(status_code=404, detail="Um ou mais repasses não foram encontrados")
 
-    new_comp_paths = save_upload_files(comprovantes, "comprovantes")
+    new_comp_paths = await save_upload_files_supabase(comprovantes, "comprovantes")
     for tx in rows:
         if tx.status not in ["AGUARDANDO_APROVACAO", "DIVERGENCIA", "AGUARDANDO_NF", "LIBERADO"]:
             raise HTTPException(status_code=400, detail=f"Repasse {tx.id} não pode ser aprovado no status atual")
@@ -790,12 +784,8 @@ def remove_transaction_file(
     else:
         tx.comprovantes_json = json.dumps(files)
 
-    abs_path = (UPLOADS_DIR.parent / relative_path).resolve()
-    if str(abs_path).startswith(str(UPLOADS_DIR.resolve())) and abs_path.exists() and abs_path.is_file():
-        try:
-            abs_path.unlink()
-        except Exception:
-            pass
+    # Delete from Supabase
+    delete_file_from_supabase(relative_path)
 
     db.commit()
     db.refresh(tx)
