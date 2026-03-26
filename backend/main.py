@@ -174,7 +174,7 @@ def is_manager(user: Optional[User]) -> bool:
     return bool(user and user.tipo in ["ADMIN", "SUPERADMIN"])
 
 def is_locked_transaction(tx: Transaction) -> bool:
-    return tx.status in ["PAGO", "FINALIZADO"]
+    return tx.status in ["FINALIZADO"]
 
 def serialize_transaction(tx: Transaction, current_user: Optional[User] = None) -> dict:
     comprovantes = parse_json_array(tx.comprovantes_json)
@@ -566,6 +566,8 @@ async def update_transaction(
     if len(comprovantes) > 0:
         new_paths = save_upload_files(comprovantes, "comprovantes")
         tx.comprovantes_json = json.dumps(existing_files + new_paths)
+        if tx.status not in ["FINALIZADO"]:
+            tx.status = "PAGO"
 
     if ano is not None:
         tx.ano = ano

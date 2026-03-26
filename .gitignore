@@ -24,3 +24,5 @@ frontend/.env.example
 .idea/
 .DS_Store
 projeto_snapshot.txt
+frontend.log
+backend.log

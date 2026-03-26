@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2 } from 'lucide-react'
 import {
-  approvePaymentBatch,
   downloadFile,
   finalizeTransactionsBatch,
   getTransactions,
   rejectTransaction,
   removeTransactionFile,
   updateRepasse,
+  createRepasse,
+  getUsersByType,
   uploadNotasFiscais,
 } from './api'
 
@@ -35,7 +37,7 @@ const formatDate = (tx) => {
   return `${String(tx.dia).padStart(2, '0')}/${String(tx.mes).padStart(2, '0')}/${tx.ano}`
 }
 
-const canUploadNF = (tx) => ['LIBERADO', 'AGUARDANDO_NF', 'DIVERGENCIA'].includes(tx.status)
+const canUploadNF = (tx) => ['LIBERADO', 'AGUARDANDO_NF', 'DIVERGENCIA', 'AGUARDANDO_APROVACAO'].includes(tx.status)
 
 const RepasseList = () => {
   const loggedUser = readLoggedUser()
@@ -56,12 +58,17 @@ const RepasseList = () => {
   const [files, setFiles] = useState([])
   const [saving, setSaving] = useState(false)
 
+  const [searchTerm, setSearchTerm] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
+  const [newRepasseOpen, setNewRepasseOpen] = useState(false)
+  const [partners, setPartners] = useState([])
+  const [newRepasseData, setNewRepasseData] = useState({ userId: '', dateStr: '', nomeCliente: '', valorLiberado: '', files: [] })
+
+
   const [extraComprovantesMap, setExtraComprovantesMap] = useState({})
   const [nfMap, setNfMap] = useState({})
 
   const [selectedMap, setSelectedMap] = useState({})
-  const [approveModalOpen, setApproveModalOpen] = useState(false)
-  const [approveFiles, setApproveFiles] = useState([])
   const [processingBatch, setProcessingBatch] = useState(false)
 
   const loadRows = async () => {
@@ -106,6 +113,86 @@ const RepasseList = () => {
 
   const existingCount = useMemo(() => (editing?.comprovantes?.length || 0), [editing])
   const remainingSlots = useMemo(() => Math.max(0, 5 - existingCount), [existingCount])
+
+  
+  useEffect(() => {
+    if (isAdmin) {
+      getUsersByType('PARCEIRO').then(data => {
+        setPartners(data)
+        if (data.length > 0) setNewRepasseData(prev => ({ ...prev, userId: String(data[0].id) }))
+      }).catch(console.error)
+    }
+  }, [isAdmin])
+
+  const handleCreateRepasse = async (e) => {
+    e.preventDefault()
+    if (newRepasseData.files.length > 5) return alert('Máximo de 5 comprovantes.')
+    let y = '', m = '', d = ''
+    if (newRepasseData.dateStr) {
+      const parts = newRepasseData.dateStr.split('-')
+      y = parts[0]
+      m = parts[1]
+      d = parts[2]
+    }
+    if (!newRepasseData.userId || !y || !m || !d || !newRepasseData.nomeCliente || !newRepasseData.valorLiberado) {
+      return alert('Preencha os campos obrigatórios.')
+    }
+    const formData = new FormData()
+    formData.append('user_id', newRepasseData.userId)
+    formData.append('ano', y)
+    formData.append('mes', m)
+    formData.append('dia', d)
+    formData.append('nome_cliente', newRepasseData.nomeCliente)
+    
+    const valString = newRepasseData.valorLiberado.replace(/\D/g, '')
+    const valFloat = (Number(valString)/100).toFixed(2)
+    formData.append('valor_liberado', valFloat)
+    
+    newRepasseData.files.forEach(f => formData.append('comprovantes', f))
+    
+    setSaving(true)
+    try {
+      await createRepasse(formData)
+      alert('Repasse criado com sucesso')
+      setNewRepasseOpen(false)
+      loadRows()
+    } catch (e) {
+      alert(e?.response?.data?.detail || 'Erro ao criar')
+    } finally {
+      setSaving(false)
+    }
+  }
+  
+  const StatusBadge = ({ status }) => {
+    switch (status) {
+      case 'AGUARDANDO_NF':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-slate-100 text-slate-700 border border-slate-200"><Clock className="w-3.5 h-3.5" /> Aguardando NF</span>
+      case 'AGUARDANDO_APROVACAO':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-amber-50 text-amber-700 border border-amber-200"><AlertTriangle className="w-3.5 h-3.5" /> Aprovação</span>
+      case 'PAGO':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle className="w-3.5 h-3.5" /> Pago</span>
+      case 'DIVERGENCIA':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-red-50 text-red-600 border border-red-200"><AlertCircle className="w-3.5 h-3.5" /> Divergência</span>
+      case 'FINALIZADO':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-slate-900 text-slate-50 border border-slate-900"><Lock className="w-3.5 h-3.5" /> Finalizado</span>
+      case 'LIBERADO':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-indigo-50 text-indigo-700 border border-indigo-200"><CheckCircle className="w-3.5 h-3.5" /> Liberado</span>
+      case 'CONFERENCIA':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-blue-50 text-blue-700 border border-blue-200"><Clock className="w-3.5 h-3.5" /> Conferência</span>
+      default:
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-secondary text-secondary-foreground border border-border">{status}</span>
+    }
+  }
+  
+  const filteredRows = rows.filter(tx => {
+    const matchSearch = tx.nome_cliente?.toLowerCase().includes(searchTerm.toLowerCase()) || tx.parceiro_nome?.toLowerCase().includes(searchTerm.toLowerCase())
+    if (searchTerm && !matchSearch) return false
+    if (dateFilter) {
+      const txDate = toDateInput(tx)
+      if (txDate !== dateFilter) return false
+    }
+    return true
+  })
 
   const handleDateChange = (value) => {
     setDataRef(value)
@@ -280,40 +367,6 @@ const RepasseList = () => {
     setSelectedMap(next)
   }
 
-  const openApproveModal = () => {
-    if (selectedIds.length === 0) {
-      alert('Selecione ao menos um repasse.')
-      return
-    }
-    setApproveFiles([])
-    setApproveModalOpen(true)
-  }
-
-  const submitBatchApprove = async () => {
-    if (approveFiles.length === 0) {
-      alert('Selecione ao menos um comprovante.')
-      return
-    }
-    if (approveFiles.length > 5) {
-      alert('Máximo de 5 comprovantes.')
-      return
-    }
-
-    setProcessingBatch(true)
-    try {
-      const updatedRows = await approvePaymentBatch(selectedIds, approveFiles)
-      setRows((prev) => {
-        const map = new Map(updatedRows.map((item) => [item.id, item]))
-        return prev.map((item) => map.get(item.id) || item)
-      })
-      setSelectedMap({})
-      setApproveModalOpen(false)
-    } catch (err) {
-      alert(err?.response?.data?.detail || 'Erro ao aprovar pagamento.')
-    } finally {
-      setProcessingBatch(false)
-    }
-  }
 
   const submitBatchFinalize = async () => {
     if (selectedIds.length === 0) {
@@ -339,305 +392,476 @@ const RepasseList = () => {
     }
   }
 
-  const renderFileLinks = (tx, paths, fileType) => {
-    if (tx.status === 'FINALIZADO') {
-      if (isAdmin && tx.zip_contabilidade_url) {
-        return (
-          <button
-            onClick={() => handleDownload(tx.zip_contabilidade_url)}
-            className="text-xs px-2 py-1 rounded bg-blue-700 text-white hover:bg-blue-600"
-          >
-            Download ZIP
-          </button>
-        )
-      }
-      return <span className="text-xs text-gray-500">Disponível apenas via ZIP contábil</span>
-    }
 
-    if (!paths || paths.length === 0) {
-      return <span className="text-xs text-gray-500">Sem arquivos</span>
-    }
+  const [fileModal, setFileModal] = useState(null) // { tx, type }
+
+  const openFileModal = (tx, type) => setFileModal({ tx, type })
+  const closeFileModal = () => setFileModal(null)
+
+  const FileCell = ({ tx, type }) => {
+    const isComp = type === 'COMPROVANTE'
+    const cellFiles = isComp ? tx.comprovantes : tx.notas_fiscais
+    const count = cellFiles?.length || 0
+    const canClick = tx.status === 'FINALIZADO'
+      ? (isAdmin && isComp && tx.zip_contabilidade_url)
+      : (count > 0 || (isComp ? (isAdmin && tx.status !== 'FINALIZADO') : (isPartner && canUploadNF(tx))))
 
     return (
-      <div className="flex flex-col gap-2">
-        {paths.map((path, idx) => (
-          <div key={`${path}-${idx}`} className="flex items-center gap-2">
-            <button
-              onClick={() => handleDownload(path)}
-              className="text-xs px-2 py-1 rounded bg-blue-700 text-white hover:bg-blue-600"
-            >
-              Download {idx + 1}
-            </button>
-            {isAdmin && tx.status !== 'PAGO' && tx.status !== 'FINALIZADO' && (
-              <button
-                onClick={() => handleRemoveFile(tx, fileType, path)}
-                className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700"
-              >
-                Remover
-              </button>
-            )}
+      <div
+        className={`flex justify-center py-2 ${canClick ? 'cursor-pointer hover:opacity-70 transition-opacity' : ''}`}
+        onClick={() => canClick && openFileModal(tx, type)}
+      >
+        {tx.status === 'FINALIZADO' ? (
+          isAdmin && isComp && tx.zip_contabilidade_url ? (
+            <div className="flex items-center gap-1.5 text-blue-600 font-medium text-xs bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
+              <Download className="w-3.5 h-3.5" /> ZIP
+            </div>
+          ) : (
+            <span className="text-muted-foreground font-medium">—</span>
+          )
+        ) : count === 0 ? (
+          canClick ? (
+            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              <UploadCloud className="w-4 h-4" />
+              <span className="text-xs font-medium">Enviar</span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground font-medium">—</span>
+          )
+        ) : (
+          <div className={`flex items-center gap-1.5 font-medium ${isComp ? 'text-emerald-600' : 'text-blue-600'}`}>
+            {isComp ? <ImageIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+            <span className="text-sm">{count}</span>
           </div>
-        ))}
+        )}
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="p-4 border-b bg-gray-50 flex items-center justify-between gap-4">
-        <h3 className="font-semibold text-gray-800">Histórico de Repasses</h3>
+    <div className="space-y-6 animate-accordion-down w-full max-w-[100vw]">
+      {isAdmin && (
+        <div className="flex flex-col sm:flex-row items-center gap-4 justify-between bg-card p-4 rounded-lg border border-border mt-4">
+          <div className="flex items-center gap-4 flex-1 w-full">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <input 
+                type="text" 
+                placeholder="Buscar por parceiro ou cliente..." 
+                value={searchTerm} 
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full bg-background border border-input rounded-md pl-9 pr-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="relative">
+              <input 
+                type="date"
+                value={dateFilter}
+                onChange={e => setDateFilter(e.target.value)}
+                className="bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <button 
+            onClick={() => setNewRepasseOpen(true)}
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors w-full sm:w-auto"
+          >
+            <Plus className="w-4 h-4" /> Novo Repasse
+          </button>
+        </div>
+      )}
+
+      <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm">
         {isAdmin && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={openApproveModal}
-              disabled={selectedIds.length === 0 || processingBatch}
-              className="text-xs px-3 py-2 rounded bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-60"
-            >
-              Aprovar Pagamento
-            </button>
-            <button
-              onClick={submitBatchFinalize}
-              disabled={selectedIds.length === 0 || processingBatch}
-              className="text-xs px-3 py-2 rounded bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"
-            >
-              Finalizar e Gerar ZIP
-            </button>
+          <div className="p-4 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-4">
+            <h3 className="font-semibold text-foreground">Histórico de Repasses</h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={submitBatchFinalize}
+                disabled={selectedIds.length === 0 || processingBatch}
+                className="text-xs px-3 py-2 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border disabled:opacity-50 transition-colors"
+              >
+                Finalizar e Gerar ZIP
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="p-10 text-center text-muted-foreground">Carregando repasses...</div>
+        ) : error ? (
+          <div className="p-10 text-center text-destructive">{error}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead>
+                <tr className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
+                  {isAdmin && (
+                    <th className="px-4 py-3 w-10 text-center">
+                      <input type="checkbox" checked={allChecked || false} onChange={toggleAllRows} className="rounded border-input text-primary focus:ring-primary" />
+                    </th>
+                  )}
+                  <th className="px-6 py-3">Data</th>
+                  {isAdmin && <th className="px-6 py-3">Parceiro</th>}
+                  <th className="px-6 py-3">Cliente</th>
+                  <th className="px-6 py-3">Valor</th>
+                  <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Nota Fiscal</th>
+                  <th className="px-6 py-3">Comprovante</th>
+                  {isAdmin && <th className="px-6 py-3 text-right">Ação</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50 text-foreground">
+                {filteredRows.map((tx) => {
+                  const compCount = tx.comprovantes?.length || 0
+                  const remainingComp = Math.max(0, 5 - compCount)
+                  const selectedComp = extraComprovantesMap[tx.id] || []
+                  const selectedNf = nfMap[tx.id] || []
+                  const highlight = isPartner && tx.status === 'DIVERGENCIA'
+
+                  return (
+                    <tr key={tx.id} className={`transition-colors hover:bg-muted/30 ${highlight ? 'bg-destructive/5' : ''}`}>
+                      {isAdmin && (
+                        <td className="px-4 py-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={!!selectedMap[tx.id]}
+                            disabled={tx.status === 'FINALIZADO'}
+                            onChange={() => toggleRow(tx.id)}
+                            className="rounded border-input text-primary focus:ring-primary"
+                          />
+                        </td>
+                      )}
+                      <td className="px-6 py-4">{formatDate(tx)}</td>
+                      {isAdmin && <td className="px-6 py-4 font-medium">{tx.parceiro_nome || tx.parceiro_id}</td>}
+                      <td className="px-6 py-4">{tx.nome_cliente || '-'}</td>
+                      <td className="px-6 py-4 font-medium">{formatCurrency(tx.valor_liberado)}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1 items-start">
+                          <StatusBadge status={tx.status} />
+                          {isPartner && tx.status === 'DIVERGENCIA' && (
+                            <span className="text-[10px] text-destructive max-w-[120px] whitespace-normal">NF recusada. Envie nova nota.</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 align-middle text-center">
+                        <FileCell tx={tx} type="NF" />
+                      </td>
+                      <td className="px-6 py-4 align-middle text-center">
+                        <FileCell tx={tx} type="COMPROVANTE" />
+                      </td>
+                      {isAdmin && (
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {tx.status !== 'FINALIZADO' && (
+                              <button
+                                onClick={() => openEdit(tx)}
+                                className="text-xs font-medium px-3 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors text-foreground"
+                              >
+                                Editar
+                              </button>
+                            )}
+                            {tx.status === 'AGUARDANDO_APROVACAO' && (
+                              <button
+                                onClick={() => handleReject(tx)}
+                                className="text-xs font-medium px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                              >
+                                Recusar
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+                {filteredRows.length === 0 && (
+                  <tr>
+                    <td colSpan={isAdmin ? 9 : 7} className="p-12 text-center text-muted-foreground">Nenhum repasse encontrado.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {loading ? (
-        <div className="p-10 text-center text-gray-400">Carregando repasses...</div>
-      ) : error ? (
-        <div className="p-10 text-center text-red-500">{error}</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
-                {isAdmin && (
-                  <th className="px-4 py-3">
-                    <input type="checkbox" checked={allChecked} onChange={toggleAllRows} />
-                  </th>
+      {newRepasseOpen && isAdmin && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <form onSubmit={handleCreateRepasse} className="bg-card w-full max-w-lg rounded-xl border border-border shadow-lg p-6 relative">
+            <button type="button" onClick={() => setNewRepasseOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-xl font-bold text-foreground mb-6">Novo Repasse</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Parceiro</label>
+                <select
+                  value={newRepasseData.userId}
+                  onChange={e => setNewRepasseData({...newRepasseData, userId: e.target.value})}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Selecione...</option>
+                  {partners.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.cnpj_cpf})</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Data do Repasse</label>
+                <input
+                  type="date"
+                  value={newRepasseData.dateStr}
+                  onChange={e => setNewRepasseData({...newRepasseData, dateStr: e.target.value})}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                {newRepasseData.dateStr && (
+                  <p className="mt-1.5 text-xs font-medium text-accent-foreground">Período Selecionado: {newRepasseData.dateStr.split('-').reverse().join('/')}</p>
                 )}
-                <th className="px-6 py-3">Data</th>
-                <th className="px-6 py-3">Parceiro</th>
-                <th className="px-6 py-3">Cliente</th>
-                <th className="px-6 py-3">Valor</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3">Comprovante</th>
-                <th className="px-6 py-3">Nota Fiscal</th>
-                <th className="px-6 py-3 text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((tx) => {
-                const compCount = tx.comprovantes?.length || 0
-                const remainingComp = Math.max(0, 5 - compCount)
-                const selectedComp = extraComprovantesMap[tx.id] || []
-                const selectedNf = nfMap[tx.id] || []
-                const highlight = isPartner && tx.status === 'DIVERGENCIA'
+              </div>
 
-                return (
-                  <tr key={tx.id} className={highlight ? 'bg-red-50' : ''}>
-                    {isAdmin && (
-                      <td className="px-4 py-4">
-                        <input
-                          type="checkbox"
-                          checked={!!selectedMap[tx.id]}
-                          disabled={tx.status === 'FINALIZADO'}
-                          onChange={() => toggleRow(tx.id)}
-                        />
-                      </td>
-                    )}
-                    <td className="px-6 py-4">{formatDate(tx)}</td>
-                    <td className="px-6 py-4">{tx.parceiro_nome || tx.parceiro_id}</td>
-                    <td className="px-6 py-4">{tx.nome_cliente || '-'}</td>
-                    <td className="px-6 py-4">{formatCurrency(tx.valor_liberado)}</td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium">{tx.status}</div>
-                      {isPartner && tx.status === 'DIVERGENCIA' && (
-                        <div className="text-xs text-red-700">NF recusada. Envie uma nova nota fiscal.</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {renderFileLinks(tx, tx.comprovantes, 'COMPROVANTE')}
-                      {isAdmin && tx.status !== 'PAGO' && tx.status !== 'FINALIZADO' && remainingComp > 0 && (
-                        <div className="mt-2 flex flex-col gap-2">
-                          <input
-                            type="file"
-                            multiple
-                            onChange={(e) => selectExtraComprovantes(tx.id, e, compCount)}
-                            className="text-xs"
-                          />
-                          <button
-                            onClick={() => uploadExtraComprovantes(tx)}
-                            disabled={selectedComp.length === 0 || selectedComp.length > remainingComp}
-                            className="text-xs px-2 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-70"
-                          >
-                            + Subir Comprovante
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {renderFileLinks(tx, tx.notas_fiscais, 'NF')}
-                      {isPartner && canUploadNF(tx) && tx.status !== 'FINALIZADO' && (
-                        <div className="mt-2 flex flex-col gap-2">
-                          <input
-                            type="file"
-                            multiple
-                            accept="application/pdf,.pdf"
-                            onChange={(e) => selectNfFiles(tx.id, e)}
-                            className="text-xs"
-                          />
-                          <button
-                            onClick={() => submitNf(tx)}
-                            disabled={selectedNf.length === 0 || selectedNf.length > 5}
-                            className="text-xs px-2 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-70"
-                          >
-                            Substituir/Enviar NF
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {isAdmin ? (
-                        <div className="flex items-center justify-end gap-2">
-                          {tx.status !== 'FINALIZADO' && (
-                            <button
-                              onClick={() => openEdit(tx)}
-                              className="text-sm px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-600"
-                            >
-                              Editar
-                            </button>
-                          )}
-                          {tx.status === 'AGUARDANDO_APROVACAO' && (
-                            <button
-                              onClick={() => handleReject(tx)}
-                              className="text-sm px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
-                            >
-                              Recusar
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className="p-10 text-center text-gray-400">Nenhum repasse encontrado.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Nome do Cliente</label>
+                <input
+                  type="text"
+                  value={newRepasseData.nomeCliente}
+                  onChange={e => setNewRepasseData({...newRepasseData, nomeCliente: e.target.value})}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Ex: João da Silva"
+                />
+              </div>
 
-      {approveModalOpen && isAdmin && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg border border-gray-200 p-6 w-full max-w-lg">
-            <h4 className="text-lg font-semibold mb-4">Aprovar Pagamento</h4>
-            <p className="text-sm text-gray-600 mb-3">
-              Repasses selecionados: <strong>{selectedIds.length}</strong>
-            </p>
-            <input
-              type="file"
-              multiple
-              onChange={(e) => setApproveFiles(Array.from(e.target.files || []))}
-              className="w-full border border-gray-300 rounded px-3 py-2 mb-2"
-            />
-            <p className="text-xs text-gray-500 mb-4">{approveFiles.length} arquivo(s) selecionado(s).</p>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Valor Liberado</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={newRepasseData.valorLiberado ? (Number(newRepasseData.valorLiberado.replace(/\D/g, ''))/100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
+                  onChange={e => setNewRepasseData({...newRepasseData, valorLiberado: e.target.value})}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="R$ 0,00"
+                />
+              </div>
 
-            <div className="flex items-center gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setApproveModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded"
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Comprovantes (até 5)</label>
+                <input
+                  type="file"
+                  multiple
+                  onChange={e => setNewRepasseData({...newRepasseData, files: Array.from(e.target.files || [])})}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-muted file:text-foreground hover:file:bg-muted/80 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end gap-3">
+              <button 
+                type="button" 
+                onClick={() => setNewRepasseOpen(false)}
+                className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors font-medium text-sm"
               >
                 Cancelar
               </button>
-              <button
-                type="button"
-                onClick={submitBatchApprove}
-                disabled={processingBatch}
-                className="px-4 py-2 bg-blue-700 text-white rounded disabled:opacity-70"
-              >
-                {processingBatch ? 'Processando...' : 'Confirmar Aprovação'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editing && isAdmin && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <form onSubmit={handleSave} className="bg-white rounded-lg border border-gray-200 p-6 w-full max-w-xl">
-            <h4 className="text-lg font-semibold mb-4">Editar Repasse #{editing.id}</h4>
-
-            <label className="block text-sm text-gray-700 mb-1">Data</label>
-            <input
-              type="date"
-              value={dataRef}
-              onChange={(e) => handleDateChange(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
-            />
-
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <input type="number" value={ano} onChange={(e) => setAno(e.target.value)} className="border border-gray-300 rounded px-3 py-2" />
-              <input type="number" value={mes} onChange={(e) => setMes(e.target.value)} className="border border-gray-300 rounded px-3 py-2" />
-              <input type="number" value={dia} onChange={(e) => setDia(e.target.value)} className="border border-gray-300 rounded px-3 py-2" />
-            </div>
-
-            <label className="block text-sm text-gray-700 mb-1">Nome do Cliente</label>
-            <input
-              type="text"
-              value={nomeCliente}
-              onChange={(e) => setNomeCliente(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
-            />
-
-            <label className="block text-sm text-gray-700 mb-1">Valor Liberado</label>
-            <input
-              type="number"
-              step="0.01"
-              value={valorLiberado}
-              onChange={(e) => setValorLiberado(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
-            />
-
-            <div className="text-sm text-gray-600 mb-2">
-              Comprovantes atuais: {existingCount}/5. Você pode adicionar mais {remainingSlots}.
-            </div>
-            <input
-              type="file"
-              multiple
-              onChange={handleFilesChange}
-              className="w-full border border-gray-300 rounded px-3 py-2 mb-2"
-            />
-            <div className="text-xs text-gray-500 mb-5">{files.length} arquivo(s) selecionado(s).</div>
-
-            <div className="flex items-center gap-2 justify-end">
-              <button type="button" onClick={closeEdit} className="px-4 py-2 border border-gray-300 rounded">
-                Cancelar
-              </button>
-              <button
+              <button 
                 type="submit"
-                disabled={saving || files.length > remainingSlots}
-                className="px-4 py-2 bg-blue-700 text-white rounded disabled:opacity-70"
+                disabled={saving}
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 font-medium text-sm transition-colors disabled:opacity-50"
               >
-                {saving ? 'Salvando...' : 'Salvar'}
+                {saving ? 'Salvando...' : 'Salvar Repasse'}
               </button>
             </div>
           </form>
         </div>
       )}
+
+      {/* Edit Modal Additions */}
+      {editing && isAdmin && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <form onSubmit={handleSave} className="bg-card rounded-xl border border-border shadow-lg p-6 w-full max-w-xl relative">
+            <button type="button" onClick={closeEdit} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
+              <X className="w-5 h-5" />
+            </button>
+            <h4 className="text-xl font-bold text-foreground mb-6">Editar Repasse #{editing.id}</h4>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Data</label>
+                <input
+                  type="date"
+                  value={dataRef}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Nome do Cliente</label>
+                <input
+                  type="text"
+                  value={nomeCliente}
+                  onChange={(e) => setNomeCliente(e.target.value)}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Valor Liberado</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={valorLiberado}
+                  onChange={(e) => setValorLiberado(e.target.value)}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Comprovantes Extra (Max 5 total)</label>
+                <div className="text-xs text-muted-foreground mb-2">Comprovantes atuais: {existingCount}/5. Permite mais {remainingSlots}.</div>
+                <input
+                  type="file"
+                  multiple
+                  onChange={handleFilesChange}
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-muted file:text-foreground hover:file:bg-muted/80 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end gap-3">
+              <button type="button" onClick={closeEdit} className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors font-medium text-sm">
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving || files.length > remainingSlots}
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 font-medium text-sm transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+
+      {/* File Modal */}
+      {fileModal && (() => {
+        const modalTx = rows.find(r => r.id === fileModal.tx.id) || fileModal.tx
+        const isComp = fileModal.type === 'COMPROVANTE'
+        const modalFiles = isComp ? modalTx.comprovantes : modalTx.notas_fiscais
+        const modalCount = modalFiles?.length || 0
+        const modalRemaining = Math.max(0, 5 - modalCount)
+        const canUploadModal = isComp
+          ? (isAdmin && modalTx.status !== 'FINALIZADO' && modalRemaining > 0)
+          : (isPartner && canUploadNF(modalTx) && modalTx.status !== 'FINALIZADO')
+
+        return (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={closeFileModal}>
+            <div className="bg-card w-full max-w-md rounded-xl border border-border shadow-lg p-6 relative" onClick={e => e.stopPropagation()}>
+              <button type="button" onClick={closeFileModal} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+
+              <h2 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+                {isComp ? <ImageIcon className="w-5 h-5 text-emerald-600" /> : <FileText className="w-5 h-5 text-blue-600" />}
+                {isComp ? 'Comprovantes' : 'Notas Fiscais'}
+              </h2>
+              <p className="text-xs text-muted-foreground mb-5">
+                Repasse #{modalTx.id} — {modalTx.nome_cliente || 'Sem cliente'}
+              </p>
+
+              {/* Upload Section */}
+              {canUploadModal && (
+                <div className="mb-5 p-4 bg-muted/30 rounded-lg border border-border space-y-3">
+                  <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <UploadCloud className="w-4 h-4" />
+                    Upload {isComp ? 'Comprovante' : 'Nota Fiscal'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {modalCount}/5 enviado(s) — Pode enviar mais {modalRemaining}
+                  </p>
+                  <input
+                    type="file"
+                    multiple
+                    accept={isComp ? undefined : "application/pdf,.pdf"}
+                    onChange={(e) => isComp ? selectExtraComprovantes(modalTx.id, e, modalCount) : selectNfFiles(modalTx.id, e)}
+                    className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20 bg-background border border-input rounded-md p-2 transition-colors"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (isComp) await uploadExtraComprovantes(modalTx)
+                      else await submitNf(modalTx)
+                    }}
+                    disabled={isComp
+                      ? (!extraComprovantesMap[modalTx.id] || extraComprovantesMap[modalTx.id]?.length === 0 || extraComprovantesMap[modalTx.id]?.length > modalRemaining)
+                      : (!nfMap[modalTx.id] || nfMap[modalTx.id]?.length === 0 || nfMap[modalTx.id]?.length > 5)
+                    }
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    <UploadCloud className="w-4 h-4" /> Enviar
+                  </button>
+                </div>
+              )}
+
+              {/* Files List */}
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-foreground mb-2">Arquivos</p>
+                {modalTx.status === 'FINALIZADO' ? (
+                  isAdmin && modalTx.zip_contabilidade_url ? (
+                    isComp ? (
+                      <button
+                        onClick={() => handleDownload(modalTx.zip_contabilidade_url)}
+                        className="w-full flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors text-sm font-medium"
+                      >
+                        <Download className="w-4 h-4" /> Download ZIP Contábil
+                      </button>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center italic py-3">Disponível no ZIP (Coluna Comprovante)</p>
+                    )
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center italic py-3">Não disponível</p>
+                  )
+                ) : modalCount > 0 ? (
+                  <div className="divide-y divide-border/50 border border-border rounded-lg overflow-hidden">
+                    {modalFiles.map((path, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
+                        <button
+                          onClick={() => handleDownload(path)}
+                          className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          <Download className="w-4 h-4" />
+                          {isComp ? 'Comprovante' : 'Nota Fiscal'} {idx + 1}
+                        </button>
+                        {isAdmin && modalTx.status !== 'FINALIZADO' && (
+                          <button
+                            onClick={() => handleRemoveFile(modalTx, fileModal.type, path)}
+                            className="text-red-500 hover:text-red-600 p-1.5 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center italic py-3">Nenhum arquivo enviado</p>
+                )}
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={closeFileModal}
+                  className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors font-medium text-sm"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
     </div>
   )
 }
-
 export default RepasseList
