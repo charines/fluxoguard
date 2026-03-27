@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { createRepasse, getUsers, getUsersByType, login, updateUser, updateUserActive } from './api'
-import { LayoutDashboard, LogIn, ShieldCheck, Users, ChevronDown } from 'lucide-react'
+import { LayoutDashboard, LogIn, ShieldCheck, Users, ChevronDown, Shield, BarChart3 } from 'lucide-react'
 import AdminRegister from './AdminRegister'
 import RepasseList from './RepasseList'
+import LandingPage from './LandingPage'
 
 const getLoggedUser = () => {
   const rawUser = localStorage.getItem('fluxoguard_admin_user')
@@ -159,36 +160,58 @@ const UnifiedLogin = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <form onSubmit={handleLogin} className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-200 text-center">
-        <h1 className="text-2xl font-bold text-slate-900 mb-6">Login FluxoGuard</h1>
-        <p className="text-gray-500 mb-8">Email ou CNPJ + Código (123123)</p>
+    <div className="dark-theme min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+      {/* Background glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 blur-[100px] rounded-full pointer-events-none" />
+      
+      <form onSubmit={handleLogin} className="glass p-10 rounded-2xl shadow-2xl w-full max-w-md border border-white/10 text-center relative z-10 backdrop-blur-xl">
+        <div className="flex justify-center mb-6">
+          <div className="relative">
+            <Shield className="w-12 h-12 text-primary shrink-0" />
+            <BarChart3 className="w-6 h-6 text-background absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+          </div>
+        </div>
+        
+        <h1 className="text-3xl font-space font-extrabold text-foreground mb-2 tracking-tight">Login FluxoGuard</h1>
+        <p className="text-muted-foreground mb-8 text-sm">Organização financeira de ponta a ponta.</p>
 
-        <input
-          type="text"
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)}
-          placeholder="Email ou CNPJ"
-          className="w-full p-3 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <div className="space-y-4 text-left">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5 block ml-1">Identificador</label>
+            <input
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="E-mail ou CNPJ"
+              className="w-full bg-background/50 border border-white/10 rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all placeholder:text-muted-foreground/30"
+            />
+          </div>
 
-        <input
-          type="password"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="Código (123123)"
-          className="w-full p-3 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5 block ml-1">Código de Acesso</label>
+            <input
+              type="password"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123123"
+              className="w-full bg-background/50 border border-white/10 rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all placeholder:text-muted-foreground/30"
+            />
+          </div>
+        </div>
 
-        {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
+        {error && <p className="text-sm text-red-400 mt-4 mb-2">{error}</p>}
 
         <button
           type="submit"
           disabled={loading}
-          className="block w-full bg-blue-600 text-white p-3 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-70"
+          className="mt-8 w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:shadow-[0_0_20px_rgba(255,107,0,0.3)] transition-all disabled:opacity-50 active:scale-95"
         >
-          {loading ? 'Entrando...' : 'Entrar'}
+          {loading ? 'Validando...' : 'ENTRAR NO SISTEMA'}
         </button>
+
+        <p className="mt-8 text-xs text-muted-foreground">
+          Precisa de ajuda? <a href="#" className="text-primary hover:underline">Falar com suporte</a>
+        </p>
       </form>
     </div>
   )
@@ -611,7 +634,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<UnifiedLogin />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<UnifiedLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/admin/manage" element={<ManageUsersPage />} />
