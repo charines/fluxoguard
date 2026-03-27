@@ -12,14 +12,32 @@ SUPABASE_BUCKET = "notas-fiscais"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def list_files():
-    print(f"🔍 Listando arquivos no bucket '{SUPABASE_BUCKET}':")
+def list_all_buckets():
+    print("🪣 Listando todos os buckets:")
     try:
-        res = supabase.storage.from_(SUPABASE_BUCKET).list()
-        for file in res:
-            print(f"📄 {file['name']} (Tamanho: {file['metadata']['size']} bytes)")
+        buckets = supabase.storage.list_buckets()
+        for b in buckets:
+            print(f"Bucket: {b.name}")
+            list_files_recursive(b.name, "")
     except Exception as e:
-        print(f"❌ Erro ao listar: {str(e)}")
+        print(f"❌ Erro ao listar buckets: {str(e)}")
+
+def list_files_recursive(bucket_name, path):
+    try:
+        res = supabase.storage.from_(bucket_name).list(path)
+        if not res:
+            return
+        for file_obj in res:
+            name = file_obj.get('name', 'N/A')
+            metadata = file_obj.get('metadata')
+            if metadata is None: # Likely a folder
+                print(f"  📁 {path}/{name}".strip("/"))
+                list_files_recursive(bucket_name, f"{path}/{name}".strip("/"))
+            else:
+                size = metadata.get('size', 0)
+                print(f"  📄 {path}/{name} ({size} bytes)".strip("/"))
+    except Exception as e:
+        print(f"  ❌ Erro ao listar '{path}' no bucket '{bucket_name}': {str(e)}")
 
 if __name__ == "__main__":
-    list_files()
+    list_all_buckets()

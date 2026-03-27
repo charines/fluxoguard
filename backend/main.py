@@ -197,9 +197,9 @@ def serialize_transaction(tx: Transaction, current_user: Optional[User] = None) 
         "valor_liberado": tx.valor_liberado,
         "valor_ajustado": tx.valor_ajustado,
         "status": tx.status,
-        "comprovantes": [gerar_link_signed(p) for p in comprovantes],
-        "notas_fiscais": [gerar_link_signed(p) for p in notas_fiscais],
-        "zip_contabilidade_url": gerar_link_signed(zip_url) if zip_url else None,
+        "comprovantes": comprovantes,
+        "notas_fiscais": notas_fiscais,
+        "zip_contabilidade_url": zip_url,
         "data_criacao": tx.data_criacao.isoformat() if tx.data_criacao else None,
     }
 
