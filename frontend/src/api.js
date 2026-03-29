@@ -174,4 +174,9 @@ export const downloadFile = async (filePath) => {
   return response.data;
 };
 
+export const checkHealth = async () => {
+  const response = await api.get('/health');
+  return response.data;
+};
+
 export default api;
