@@ -8,3 +8,5 @@ pdfplumber
 python-dotenv
 email-validator
 supabase
+PyJWT
+pycryptodome
