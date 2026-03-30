@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
+import CryptoJS from 'crypto-js'
+
+const MAGIC_SECRET = import.meta.env.VITE_MAGIC_LINK_SECRET || 'fluxoguard_default_dev_key_2026'
 import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   changeTransactionStatus,
@@ -82,6 +85,15 @@ const RepasseList = () => {
     const dataStr = formatDate(tx);
     const valorStr = formatCurrency(tx.valor_liberado);
     
+    // MAGIC LINK LOGIC
+    const payload = JSON.stringify({
+      id: transacaoId,
+      email: parceiroEmail,
+      extExp: Date.now() + 24 * 60 * 60 * 1000 // 24h
+    })
+    const encrypted = CryptoJS.AES.encrypt(payload, MAGIC_SECRET).toString()
+    const magicLink = `https://fluxoguard-web.onrender.com/secure-share?token=${encodeURIComponent(encrypted)}`
+
     let bodyText = `${config.suggestion}\n\n`
     bodyText += `--- DETALHES DA TRANSAÇÃO ---\n`
     bodyText += `ID: #${transacaoId}\n`
@@ -89,7 +101,8 @@ const RepasseList = () => {
     bodyText += `Parceiro: ${tx.parceiro_nome || 'N/A'}\n`
     bodyText += `Cliente: ${tx.nome_cliente || 'N/A'}\n`
     bodyText += `Valor: ${valorStr}\n`
-    bodyText += `Status Atual: ${status}`
+    bodyText += `Status Atual: ${status}\n\n`
+    bodyText += `Acesse os detalhes e baixe os documentos com segurança aqui: ${magicLink}`
 
     const body = encodeURIComponent(bodyText)
     return `mailto:${parceiroEmail}?subject=${subject}&body=${body}`
