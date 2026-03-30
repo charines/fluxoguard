@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { HashRouter, Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { createRepasse, getUsers, getUsersByType, login, updateUser, updateUserActive } from './api'
 import { LayoutDashboard, LogIn, ShieldCheck, Users, ChevronDown, Shield, BarChart3 } from 'lucide-react'
 import AdminRegister from './AdminRegister'
@@ -642,11 +642,10 @@ const EditUserPage = () => {
     </DashboardLayout>
   )
 }
-
 function App() {
   return (
     <ApiHealthProvider>
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginWithHealthCheck />} />
@@ -658,7 +657,7 @@ function App() {
           <Route path="/secure-share" element={<SecureShare />} />
           <Route path="/admin/edit/:userId" element={<EditUserPage />} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </ApiHealthProvider>
   )
 }

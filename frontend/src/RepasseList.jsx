@@ -92,7 +92,7 @@ const RepasseList = () => {
       extExp: Date.now() + 24 * 60 * 60 * 1000 // 24h
     })
     const encrypted = CryptoJS.AES.encrypt(payload, MAGIC_SECRET).toString()
-    const magicLink = `https://fluxoguard-web.onrender.com/secure-share?token=${encodeURIComponent(encrypted)}`
+    const magicLink = `https://fluxoguard-web.onrender.com/#/secure-share?token=${encodeURIComponent(encrypted)}`
 
     let bodyText = `${config.suggestion}\n\n`
     bodyText += `--- DETALHES DA TRANSAÇÃO ---\n`
