@@ -7,6 +7,7 @@ import RepasseList from './RepasseList'
 import LandingPage from './LandingPage'
 import { ApiHealthProvider, useApiHealth } from './ApiHealthContext'
 import HealthScreen from './HealthScreen'
+import SecureShare from './SecureShare'
 
 const getLoggedUser = () => {
   const rawUser = localStorage.getItem('fluxoguard_admin_user')
@@ -654,6 +655,7 @@ function App() {
           <Route path="/admin/manage" element={<ManageUsersPage />} />
           <Route path="/admin/repasses" element={<RepasseListPage />} />
           <Route path="/partner/transactions" element={<PartnerTransactionsPage />} />
+          <Route path="/secure-share" element={<SecureShare />} />
           <Route path="/admin/edit/:userId" element={<EditUserPage />} />
         </Routes>
       </BrowserRouter>
