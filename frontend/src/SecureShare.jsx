@@ -6,7 +6,7 @@ import api, { API_BASE_URL, buildDownloadPath } from './api';
 import { useApiHealth } from './ApiHealthContext';
 import HealthScreen from './HealthScreen';
 
-const MAGIC_SECRET = import.meta.env.VITE_MAGIC_LINK_SECRET || 'fluxoguard_default_dev_key_2026';
+const MAGIC_SECRET = import.meta.env.VITE_MAGIC_LINK_SECRET || 'fluxoguard_secure_key_2026';
 
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return '-';

@@ -9,7 +9,7 @@ const HealthScreen = ({ status, onRetry }) => {
     <div className="dark-theme min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden text-center transition-all duration-700">
       {/* Background glow effects */}
       <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] blur-[120px] rounded-full pointer-events-none transition-colors duration-1000 ${isOffline ? 'bg-red-500/5' : 'bg-primary/10'}`} />
-      
+
       <div className="glass p-12 rounded-3xl shadow-2xl w-full max-w-lg border border-white/5 relative z-10 backdrop-blur-2xl">
         <div className="flex justify-center mb-8">
           <div className="relative">
@@ -28,12 +28,12 @@ const HealthScreen = ({ status, onRetry }) => {
         {isLoading ? (
           <>
             <h1 className="text-3xl font-space font-extrabold text-white mb-4 tracking-tight drop-shadow-sm">
-              Quase Lá! <span className="text-primary">Estamos Acordando o Sistema.</span>
+              Quase Lá! <span className="text-primary">Estamos Iniciando o Sistema.</span>
             </h1>
             <p className="text-slate-400 mb-10 leading-relaxed max-w-sm mx-auto">
-              Nosso servidor gratuito do Render está iniciando. Isso pode levar até 60 segundos na primeira visita. Agradecemos a paciência!
+              O sistema está iniciando. Isso pode levar até 60 segundos na primeira visita. Agradecemos a sua paciência!
             </p>
-            
+
             <div className="space-y-6">
               <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/5">
                 <div className="h-full bg-primary animate-progress-bar rounded-full shadow-[0_0_15px_rgba(255,107,0,0.5)]" />
@@ -53,15 +53,15 @@ const HealthScreen = ({ status, onRetry }) => {
               Não conseguimos conectar ao servidor após algumas tentativas. Por favor, verifique sua conexão ou tente novamente mais tarde.
             </p>
             <button
-               onClick={onRetry}
-               className="bg-primary hover:bg-primary/80 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-[0_4px_15px_rgba(255,107,0,0.3)] active:scale-95"
+              onClick={onRetry}
+              className="bg-primary hover:bg-primary/80 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-[0_4px_15px_rgba(255,107,0,0.3)] active:scale-95"
             >
               Tentar Novamente
             </button>
           </>
         )}
       </div>
-      
+
       <p className="absolute bottom-8 text-xs font-bold uppercase tracking-[0.2em] text-white/20 select-none">
         FluxoGuard • Segurança & Transparência
       </p>
