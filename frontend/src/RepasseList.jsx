@@ -693,7 +693,7 @@ const RepasseList = () => {
                               className="p-1.5 rounded-md hover:bg-primary/10 transition-colors text-muted-foreground hover:text-primary"
                               title="Notificar Parceiro"
                             >
-                              <span className="text-lg font-bold">#</span>
+                              <Mail className="w-5 h-5" />
                             </button>
                             <button
                               onClick={() => setStatusMenuOpen(statusMenuOpen === tx.id ? null : tx.id)}
