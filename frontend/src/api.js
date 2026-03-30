@@ -1,8 +1,16 @@
 import axios from 'axios';
 
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: API_BASE_URL,
 });
+
+export const buildDownloadPath = (filePath) => {
+  const normalized = String(filePath || '').replace(/^\/+/, '');
+  const encoded = normalized.split('/').map(encodeURIComponent).join('/');
+  return `/download/${encoded}`;
+};
 
 const getAdminToken = () => localStorage.getItem('fluxoguard_admin_token');
 
@@ -160,17 +168,17 @@ export const removeTransactionFile = async (transactionId, fileType, filePath) =
   return response.data;
 };
 
-const buildDownloadPath = (filePath) => {
-  const normalized = String(filePath || '').replace(/^\/+/, '');
-  const encoded = normalized.split('/').map(encodeURIComponent).join('/');
-  return `/download/${encoded}`;
-};
 
 export const downloadFile = async (filePath) => {
   const response = await api.get(buildDownloadPath(filePath), {
     headers: getAuthHeaders(),
     responseType: 'blob',
   });
+  return response.data;
+};
+
+export const checkHealth = async () => {
+  const response = await api.get('/health');
   return response.data;
 };
 

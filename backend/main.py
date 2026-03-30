@@ -16,8 +16,13 @@ from typing import List, Optional
 from database import engine, Base, get_db
 from models import User, Transaction, AuthToken, NotaFiscal
 import schemas
+import hashlib
+from Crypto.Cipher import AES
+from base64 import b64decode
 
 from contextlib import asynccontextmanager
+
+MAGIC_SECRET = os.getenv("VITE_MAGIC_LINK_SECRET", "fluxoguard_secure_key_2026")
 
 
 @asynccontextmanager
@@ -58,6 +63,93 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {"message": "FluxoGuard API is running"}
+
+
+def decrypt_cryptojs_aes(encrypted_b64, passphrase):
+    try:
+        data = b64decode(encrypted_b64)
+        if not data.startswith(b'Salted__'):
+            return None
+        salt = data[8:16]
+        encrypted_data = data[16:]
+        
+        # EVP_BytesToKey derivation logic (compatible with crypto-js)
+        dk = b''
+        prev = b''
+        while len(dk) < 48: # AES-256 Key (32) + IV (16)
+            prev = hashlib.md5(prev + passphrase.encode() + salt).digest()
+            dk += prev
+        key = dk[:32]
+        iv = dk[32:48]
+        
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        decrypted = cipher.decrypt(encrypted_data)
+        # PKCS7 Unpadding
+        pad_len = decrypted[-1]
+        if pad_len < 1 or pad_len > 16:
+            return None
+        return decrypted[:-pad_len].decode('utf-8')
+    except Exception:
+        return None
+
+
+@app.get("/api/shares/{transaction_id}")
+async def get_secure_share(
+    transaction_id: int,
+    x_magic_token: Optional[str] = Header(default=None),
+    token_query: Optional[str] = Query(default=None, alias="token"),
+    db: Session = Depends(get_db)
+):
+    token = x_magic_token or token_query
+    if not token:
+        raise HTTPException(status_code=401, detail="Token de acesso ausente")
+
+    decrypted = decrypt_cryptojs_aes(token, MAGIC_SECRET)
+    if not decrypted:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    try:
+        payload = json.loads(decrypted)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Payload do token corrompido")
+
+    # Validar campos do payload
+    # No frontend definimos como 'id', 'email' e 'extExp'
+    link_tx_id = payload.get("id")
+    link_email = payload.get("email")
+    ext_exp = payload.get("extExp")
+
+    if link_tx_id != transaction_id:
+        raise HTTPException(status_code=403, detail="ID da transação não corresponde ao token")
+
+    if ext_exp and datetime.now(timezone.utc).timestamp() * 1000 > ext_exp:
+        raise HTTPException(status_code=403, detail="Link de acesso expirado")
+
+    tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Repasse não encontrado")
+
+    # Opcional: Validar se o parceiro do repasse é o mesmo do token
+    if tx.parceiro.email != link_email and tx.parceiro.cnpj_cpf != link_email:
+         # Email or CNPJ mismatch
+         pass
+
+    # Preparar resposta de perfil para auto-login se necessário
+    # Buscamos o parceiro no banco
+    parceiro = tx.parceiro
+    user_profile = {
+        "id": parceiro.id,
+        "nome": parceiro.nome,
+        "email": parceiro.email,
+        "tipo": parceiro.tipo,
+        "cnpj_cpf": parceiro.cnpj_cpf,
+        "is_active": parceiro.is_active
+    }
+
+    # Serializar transação (incluindo links se status permitir)
+    data = serialize_transaction(tx, current_user=parceiro)
+    data["user_profile"] = user_profile
+    return data
 
 
 @app.get("/health")
@@ -190,6 +282,7 @@ def serialize_transaction(tx: Transaction, current_user: Optional[User] = None) 
         "user_id": tx.parceiro_id,
         "parceiro_id": tx.parceiro_id,
         "parceiro_nome": tx.parceiro.nome if tx.parceiro else None,
+        "parceiro_email": tx.parceiro.email if tx.parceiro else None,
         "ano": tx.ano,
         "mes": tx.mes,
         "dia": tx.dia,

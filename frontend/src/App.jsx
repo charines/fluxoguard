@@ -5,6 +5,9 @@ import { LayoutDashboard, LogIn, ShieldCheck, Users, ChevronDown, Shield, BarCha
 import AdminRegister from './AdminRegister'
 import RepasseList from './RepasseList'
 import LandingPage from './LandingPage'
+import { ApiHealthProvider, useApiHealth } from './ApiHealthContext'
+import HealthScreen from './HealthScreen'
+import SecureShare from './SecureShare'
 
 const getLoggedUser = () => {
   const rawUser = localStorage.getItem('fluxoguard_admin_user')
@@ -215,6 +218,16 @@ const UnifiedLogin = () => {
       </form>
     </div>
   )
+}
+
+const LoginWithHealthCheck = () => {
+  const { status, retry } = useApiHealth()
+
+  if (status === 'online') {
+    return <UnifiedLogin />
+  }
+
+  return <HealthScreen status={status} onRetry={retry} />
 }
 
 const AdminDashboard = () => {
@@ -632,18 +645,21 @@ const EditUserPage = () => {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<UnifiedLogin />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/users" element={<AdminUsersPage />} />
-        <Route path="/admin/manage" element={<ManageUsersPage />} />
-        <Route path="/admin/repasses" element={<RepasseListPage />} />
-        <Route path="/partner/transactions" element={<PartnerTransactionsPage />} />
-        <Route path="/admin/edit/:userId" element={<EditUserPage />} />
-      </Routes>
-    </BrowserRouter>
+    <ApiHealthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginWithHealthCheck />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/admin/manage" element={<ManageUsersPage />} />
+          <Route path="/admin/repasses" element={<RepasseListPage />} />
+          <Route path="/partner/transactions" element={<PartnerTransactionsPage />} />
+          <Route path="/secure-share" element={<SecureShare />} />
+          <Route path="/admin/edit/:userId" element={<EditUserPage />} />
+        </Routes>
+      </BrowserRouter>
+    </ApiHealthProvider>
   )
 }
 

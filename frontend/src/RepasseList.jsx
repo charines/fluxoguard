@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check } from 'lucide-react'
+import CryptoJS from 'crypto-js'
+
+const MAGIC_SECRET = import.meta.env.VITE_MAGIC_LINK_SECRET || 'fluxoguard_default_dev_key_2026'
+import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   changeTransactionStatus,
   downloadFile,
@@ -8,7 +11,6 @@ import {
   rejectTransaction,
   removeTransactionFile,
   updateRepasse,
-  createRepasse,
   getUsersByType,
   uploadNotasFiscais,
 } from './api'
@@ -72,6 +74,91 @@ const RepasseList = () => {
   const [selectedMap, setSelectedMap] = useState({})
   const [processingBatch, setProcessingBatch] = useState(false)
   const [statusMenuOpen, setStatusMenuOpen] = useState(null) // tx.id or null
+  const [notifyModal, setNotifyModal] = useState(null) // tx or null
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 5
+
+  const generateMailtoLink = (parceiroEmail, status, transacaoId, tx) => {
+    const config = NOTIFY_CONFIG[status] || NOTIFY_CONFIG['DEFAULT']
+    const subject = encodeURIComponent(`[FluxoGuard] Atualização da Transação #${transacaoId}`)
+    
+    const dataStr = formatDate(tx);
+    const valorStr = formatCurrency(tx.valor_liberado);
+    
+    // MAGIC LINK LOGIC
+    const payload = JSON.stringify({
+      id: transacaoId,
+      email: parceiroEmail,
+      extExp: Date.now() + 24 * 60 * 60 * 1000 // 24h
+    })
+    const encrypted = CryptoJS.AES.encrypt(payload, MAGIC_SECRET).toString()
+    const magicLink = `https://fluxoguard-web.onrender.com/secure-share?token=${encodeURIComponent(encrypted)}`
+
+    let bodyText = `${config.suggestion}\n\n`
+    bodyText += `--- DETALHES DA TRANSAÇÃO ---\n`
+    bodyText += `ID: #${transacaoId}\n`
+    bodyText += `Data: ${dataStr}\n`
+    bodyText += `Parceiro: ${tx.parceiro_nome || 'N/A'}\n`
+    bodyText += `Cliente: ${tx.nome_cliente || 'N/A'}\n`
+    bodyText += `Valor: ${valorStr}\n`
+    bodyText += `Status Atual: ${status}\n\n`
+    bodyText += `Acesse os detalhes e baixe os documentos com segurança aqui: ${magicLink}`
+
+    const body = encodeURIComponent(bodyText)
+    return `mailto:${parceiroEmail}?subject=${subject}&body=${body}`
+  }
+
+  const NOTIFY_CONFIG = {
+    'LIBERADO': {
+      title: 'Enviar Lembrete de NF',
+      icon: <Clock className="w-8 h-8 text-blue-500" />,
+      suggestion: 'Lembrete: Parceiro, não esqueça de subir a Nota Fiscal do repasse para prosseguirmos com o pagamento.',
+      buttonText: 'Abrir E-mail de Lembrete',
+      color: 'blue'
+    },
+    'AGUARDANDO_NF': {
+      title: 'Enviar Lembrete de NF',
+      icon: <Clock className="w-8 h-8 text-blue-500" />,
+      suggestion: 'Lembrete: Parceiro, não esqueça de subir a Nota Fiscal do repasse para prosseguirmos com o pagamento.',
+      buttonText: 'Abrir E-mail de Lembrete',
+      color: 'blue'
+    },
+    'AGUARDANDO_APROVACAO': {
+      title: 'Notificar Análise Financeira',
+      icon: <Clock className="w-8 h-8 text-amber-500" />,
+      suggestion: 'Informamos que seu repasse está sendo analisado pelo nosso time financeiro. Em breve você receberá novas atualizações sobre o pagamento.',
+      buttonText: 'Enviar Aviso de Análise',
+      color: 'amber'
+    },
+    'DIVERGENCIA': {
+      title: 'Notificar Divergência',
+      icon: <AlertCircle className="w-8 h-8 text-red-500" />,
+      suggestion: 'Identificamos que os documentos enviados estão divergentes. O time financeiro está analisando a situação para garantir que tudo seja corrigido o quanto antes.',
+      buttonText: 'Avisar sobre Divergência',
+      color: 'red'
+    },
+    'PAGO': {
+      title: 'Enviar Recibo de Quitação',
+      icon: <FileText className="w-8 h-8 text-purple-500" />,
+      suggestion: 'Informamos que o ciclo deste repasse foi concluído com sucesso. Segue o recibo de quitação para seus registros.',
+      buttonText: 'Enviar Recibo Final',
+      color: 'purple'
+    },
+    'FINALIZADO': {
+      title: 'Repasse Finalizado',
+      icon: <Lock className="w-8 h-8 text-slate-600" />,
+      suggestion: 'Informamos que este repasse já foi finalizado no sistema. Devido ao encerramento do ciclo, os arquivos individuais não estão mais disponíveis para download. Caso necessite de alguma cópia, por favor, entre em contato com nosso time financeiro.',
+      buttonText: 'Avisar Finalização',
+      color: 'slate'
+    },
+    'DEFAULT': {
+      title: 'Notificar Parceiro',
+      icon: <Bell className="w-8 h-8 text-slate-500" />,
+      suggestion: 'Olá parceiro, gostaria de falar sobre o repasse em questão.',
+      buttonText: 'Enviar Mensagem',
+      color: 'slate'
+    }
+  }
 
   const STATUS_OPTIONS = [
     { value: 'AGUARDANDO_NF', label: 'Aguardando NF' },
@@ -462,6 +549,29 @@ const RepasseList = () => {
     )
   }
 
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return filteredRows.slice(start, start + itemsPerPage)
+  }, [filteredRows, currentPage])
+
+  const totalPages = Math.ceil(filteredRows.length / itemsPerPage)
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages)
+    }
+  }, [totalPages, currentPage])
+
+  const renderEmptyRows = () => {
+    const emptyCount = itemsPerPage - paginatedRows.length
+    if (emptyCount <= 0) return null
+    return Array.from({ length: emptyCount }).map((_, i) => (
+      <tr key={`empty-${i}`} className="h-[73px] border-b border-border/50 opacity-0">
+        <td colSpan={isAdmin ? 9 : 6}>&nbsp;</td>
+      </tr>
+    ))
+  }
+
   return (
     <div className="space-y-6 animate-accordion-down w-full max-w-[100vw]">
       {isAdmin && (
@@ -516,7 +626,8 @@ const RepasseList = () => {
         ) : error ? (
           <div className="p-10 text-center text-destructive">{error}</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead>
                 <tr className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
@@ -536,7 +647,7 @@ const RepasseList = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50 text-foreground">
-                {filteredRows.map((tx) => {
+                {paginatedRows.map((tx) => {
                   const compCount = tx.comprovantes?.length || 0
                   const remainingComp = Math.max(0, 5 - compCount)
                   const selectedComp = extraComprovantesMap[tx.id] || []
@@ -578,6 +689,13 @@ const RepasseList = () => {
                         <td className="px-6 py-4 text-center">
                           <div className="relative inline-block">
                             <button
+                              onClick={() => setNotifyModal(tx)}
+                              className="p-1.5 rounded-md hover:bg-primary/10 transition-colors text-muted-foreground hover:text-primary"
+                              title="Notificar Parceiro"
+                            >
+                              <Mail className="w-5 h-5" />
+                            </button>
+                            <button
                               onClick={() => setStatusMenuOpen(statusMenuOpen === tx.id ? null : tx.id)}
                               className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                             >
@@ -614,14 +732,55 @@ const RepasseList = () => {
                     </tr>
                   )
                 })}
+                {renderEmptyRows()}
                 {filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={isAdmin ? 9 : 7} className="p-12 text-center text-muted-foreground">Nenhum repasse encontrado.</td>
+                    <td colSpan={isAdmin ? 9 : 6} className="h-[365px] text-center text-muted-foreground align-middle">Nenhum repasse encontrado.</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {filteredRows.length > 0 && (
+            <div className="px-6 py-4 border-t border-border/50 flex items-center justify-between bg-muted/5">
+              <p className="text-xs text-muted-foreground">
+                Mostrando <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredRows.length)}</span> de <span className="font-medium">{filteredRows.length}</span> registros
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                  className="p-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-1 overflow-x-auto max-w-[150px] sm:max-w-none no-scrollbar">
+                  {Array.from({ length: totalPages }).map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      className={`min-w-[32px] h-8 rounded-md text-xs font-medium transition-colors ${
+                        currentPage === i + 1 
+                        ? 'bg-primary text-white shadow-sm' 
+                        : 'hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                  className="p-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
 
@@ -894,6 +1053,71 @@ const RepasseList = () => {
                 >
                   Fechar
                 </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Notify Modal */}
+      {notifyModal && (() => {
+        const config = NOTIFY_CONFIG[notifyModal.status] || NOTIFY_CONFIG['DEFAULT']
+        return (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setNotifyModal(null)}>
+            <div className="bg-card w-full max-w-md rounded-xl border border-border shadow-lg p-8 relative overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Decoration */}
+              <div className={`absolute -top-12 -right-12 w-32 h-32 bg-${config.color}-500/10 rounded-full blur-3xl`} />
+              
+              <button type="button" onClick={() => setNotifyModal(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex flex-col items-center text-center">
+                <div className={`mb-6 p-4 rounded-2xl bg-${config.color}-500/10 border border-${config.color}-500/20`}>
+                  {config.icon}
+                </div>
+                
+                <h3 className="text-xl font-bold text-foreground mb-2">
+                  {config.title}
+                </h3>
+                
+                <p className="text-xs font-medium text-muted-foreground mb-6 uppercase tracking-widest">
+                  Transação #{notifyModal.id}
+                </p>
+
+                <div className="w-full bg-muted/30 rounded-xl p-5 border border-border text-left mb-8">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase mb-2 block">Prévia da Mensagem:</span>
+                  <div className="text-sm text-foreground leading-relaxed italic whitespace-pre-wrap">
+                    <p className="mb-4 font-semibold">"{config.suggestion}"</p>
+                    <div className="text-[11px] text-muted-foreground space-y-1 pt-3 border-t border-border/50">
+                      <p>--- DETALHES ---</p>
+                      <p>ID: #{notifyModal.id}</p>
+                      <p>Data: {formatDate(notifyModal)}</p>
+                      <p>Parceiro: {notifyModal.parceiro_nome || 'N/A'}</p>
+                      <p>Cliente: {notifyModal.nome_cliente || 'N/A'}</p>
+                      <p>Valor: {formatCurrency(notifyModal.valor_liberado)}</p>
+                      <p>Status: {notifyModal.status}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <a
+                  href={generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal)}
+                  onClick={() => setNotifyModal(null)}
+                  className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl text-white font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-lg ${
+                    config.color === 'emerald' ? 'bg-emerald-600 shadow-emerald-500/20' : 
+                    config.color === 'red' ? 'bg-red-600 shadow-red-500/20' : 
+                    config.color === 'blue' ? 'bg-primary shadow-primary/20' : 
+                    config.color === 'amber' ? 'bg-amber-600 shadow-amber-500/20' : 
+                    'bg-purple-600 shadow-purple-500/20'
+                  }`}
+                >
+                  <Mail className="w-5 h-5" /> {config.buttonText}
+                </a>
+                
+                <p className="mt-4 text-[10px] text-muted-foreground">
+                  O link abrirá seu cliente de e-mail padrão.
+                </p>
               </div>
             </div>
           </div>
