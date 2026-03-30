@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail } from 'lucide-react'
+import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   changeTransactionStatus,
   downloadFile,
@@ -72,6 +72,8 @@ const RepasseList = () => {
   const [processingBatch, setProcessingBatch] = useState(false)
   const [statusMenuOpen, setStatusMenuOpen] = useState(null) // tx.id or null
   const [notifyModal, setNotifyModal] = useState(null) // tx or null
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 5
 
   const generateMailtoLink = (parceiroEmail, status, transacaoId, tx) => {
     const config = NOTIFY_CONFIG[status] || NOTIFY_CONFIG['DEFAULT']
@@ -109,17 +111,17 @@ const RepasseList = () => {
       color: 'blue'
     },
     'AGUARDANDO_APROVACAO': {
-      title: 'Notificar Pagamento Realizado',
-      icon: <CheckCircle className="w-8 h-8 text-emerald-500" />,
-      suggestion: 'Boas notícias! Seu pagamento já foi processado. O comprovante está disponível na plataforma FluxoGuard.',
-      buttonText: 'Enviar Aviso de Pagamento',
-      color: 'emerald'
+      title: 'Notificar Análise Financeira',
+      icon: <Clock className="w-8 h-8 text-amber-500" />,
+      suggestion: 'Informamos que seu repasse está sendo analisado pelo nosso time financeiro. Em breve você receberá novas atualizações sobre o pagamento.',
+      buttonText: 'Enviar Aviso de Análise',
+      color: 'amber'
     },
     'DIVERGENCIA': {
-      title: 'Notificar Correção Necessária',
+      title: 'Notificar Divergência',
       icon: <AlertCircle className="w-8 h-8 text-red-500" />,
-      suggestion: 'Identificamos uma divergência na sua Nota Fiscal. Por favor, verifique os detalhes no sistema e realize a correção.',
-      buttonText: 'Solicitar Correção de NF',
+      suggestion: 'Identificamos que os documentos enviados estão divergentes. O time financeiro está analisando a situação para garantir que tudo seja corrigido o quanto antes.',
+      buttonText: 'Avisar sobre Divergência',
       color: 'red'
     },
     'PAGO': {
@@ -130,11 +132,11 @@ const RepasseList = () => {
       color: 'purple'
     },
     'FINALIZADO': {
-      title: 'Enviar Recibo de Quitação',
-      icon: <FileText className="w-8 h-8 text-purple-500" />,
-      suggestion: 'Informamos que o ciclo deste repasse foi concluído com sucesso. Segue o recibo de quitação para seus registros.',
-      buttonText: 'Enviar Recibo Final',
-      color: 'purple'
+      title: 'Repasse Finalizado',
+      icon: <Lock className="w-8 h-8 text-slate-600" />,
+      suggestion: 'Informamos que este repasse já foi finalizado no sistema. Devido ao encerramento do ciclo, os arquivos individuais não estão mais disponíveis para download. Caso necessite de alguma cópia, por favor, entre em contato com nosso time financeiro.',
+      buttonText: 'Avisar Finalização',
+      color: 'slate'
     },
     'DEFAULT': {
       title: 'Notificar Parceiro',
@@ -534,6 +536,29 @@ const RepasseList = () => {
     )
   }
 
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return filteredRows.slice(start, start + itemsPerPage)
+  }, [filteredRows, currentPage])
+
+  const totalPages = Math.ceil(filteredRows.length / itemsPerPage)
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages)
+    }
+  }, [totalPages, currentPage])
+
+  const renderEmptyRows = () => {
+    const emptyCount = itemsPerPage - paginatedRows.length
+    if (emptyCount <= 0) return null
+    return Array.from({ length: emptyCount }).map((_, i) => (
+      <tr key={`empty-${i}`} className="h-[73px] border-b border-border/50 opacity-0">
+        <td colSpan={isAdmin ? 9 : 6}>&nbsp;</td>
+      </tr>
+    ))
+  }
+
   return (
     <div className="space-y-6 animate-accordion-down w-full max-w-[100vw]">
       {isAdmin && (
@@ -588,7 +613,8 @@ const RepasseList = () => {
         ) : error ? (
           <div className="p-10 text-center text-destructive">{error}</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead>
                 <tr className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
@@ -608,7 +634,7 @@ const RepasseList = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50 text-foreground">
-                {filteredRows.map((tx) => {
+                {paginatedRows.map((tx) => {
                   const compCount = tx.comprovantes?.length || 0
                   const remainingComp = Math.max(0, 5 - compCount)
                   const selectedComp = extraComprovantesMap[tx.id] || []
@@ -693,14 +719,55 @@ const RepasseList = () => {
                     </tr>
                   )
                 })}
+                {renderEmptyRows()}
                 {filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={isAdmin ? 9 : 7} className="p-12 text-center text-muted-foreground">Nenhum repasse encontrado.</td>
+                    <td colSpan={isAdmin ? 9 : 6} className="h-[365px] text-center text-muted-foreground align-middle">Nenhum repasse encontrado.</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {filteredRows.length > 0 && (
+            <div className="px-6 py-4 border-t border-border/50 flex items-center justify-between bg-muted/5">
+              <p className="text-xs text-muted-foreground">
+                Mostrando <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredRows.length)}</span> de <span className="font-medium">{filteredRows.length}</span> registros
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                  className="p-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-1 overflow-x-auto max-w-[150px] sm:max-w-none no-scrollbar">
+                  {Array.from({ length: totalPages }).map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      className={`min-w-[32px] h-8 rounded-md text-xs font-medium transition-colors ${
+                        currentPage === i + 1 
+                        ? 'bg-primary text-white shadow-sm' 
+                        : 'hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                  className="p-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
 
@@ -1028,6 +1095,7 @@ const RepasseList = () => {
                     config.color === 'emerald' ? 'bg-emerald-600 shadow-emerald-500/20' : 
                     config.color === 'red' ? 'bg-red-600 shadow-red-500/20' : 
                     config.color === 'blue' ? 'bg-primary shadow-primary/20' : 
+                    config.color === 'amber' ? 'bg-amber-600 shadow-amber-500/20' : 
                     'bg-purple-600 shadow-purple-500/20'
                   }`}
                 >
