@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check } from 'lucide-react'
+import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail } from 'lucide-react'
 import {
   changeTransactionStatus,
   downloadFile,
@@ -8,7 +8,6 @@ import {
   rejectTransaction,
   removeTransactionFile,
   updateRepasse,
-  createRepasse,
   getUsersByType,
   uploadNotasFiscais,
 } from './api'
@@ -72,6 +71,79 @@ const RepasseList = () => {
   const [selectedMap, setSelectedMap] = useState({})
   const [processingBatch, setProcessingBatch] = useState(false)
   const [statusMenuOpen, setStatusMenuOpen] = useState(null) // tx.id or null
+  const [notifyModal, setNotifyModal] = useState(null) // tx or null
+
+  const generateMailtoLink = (parceiroEmail, status, transacaoId, tx) => {
+    const config = NOTIFY_CONFIG[status] || NOTIFY_CONFIG['DEFAULT']
+    const subject = encodeURIComponent(`[FluxoGuard] Atualização da Transação #${transacaoId}`)
+    
+    const dataStr = formatDate(tx);
+    const valorStr = formatCurrency(tx.valor_liberado);
+    
+    let bodyText = `${config.suggestion}\n\n`
+    bodyText += `--- DETALHES DA TRANSAÇÃO ---\n`
+    bodyText += `ID: #${transacaoId}\n`
+    bodyText += `Data: ${dataStr}\n`
+    bodyText += `Parceiro: ${tx.parceiro_nome || 'N/A'}\n`
+    bodyText += `Cliente: ${tx.nome_cliente || 'N/A'}\n`
+    bodyText += `Valor: ${valorStr}\n`
+    bodyText += `Status Atual: ${status}`
+
+    const body = encodeURIComponent(bodyText)
+    return `mailto:${parceiroEmail}?subject=${subject}&body=${body}`
+  }
+
+  const NOTIFY_CONFIG = {
+    'LIBERADO': {
+      title: 'Enviar Lembrete de NF',
+      icon: <Clock className="w-8 h-8 text-blue-500" />,
+      suggestion: 'Lembrete: Parceiro, não esqueça de subir a Nota Fiscal do repasse para prosseguirmos com o pagamento.',
+      buttonText: 'Abrir E-mail de Lembrete',
+      color: 'blue'
+    },
+    'AGUARDANDO_NF': {
+      title: 'Enviar Lembrete de NF',
+      icon: <Clock className="w-8 h-8 text-blue-500" />,
+      suggestion: 'Lembrete: Parceiro, não esqueça de subir a Nota Fiscal do repasse para prosseguirmos com o pagamento.',
+      buttonText: 'Abrir E-mail de Lembrete',
+      color: 'blue'
+    },
+    'AGUARDANDO_APROVACAO': {
+      title: 'Notificar Pagamento Realizado',
+      icon: <CheckCircle className="w-8 h-8 text-emerald-500" />,
+      suggestion: 'Boas notícias! Seu pagamento já foi processado. O comprovante está disponível na plataforma FluxoGuard.',
+      buttonText: 'Enviar Aviso de Pagamento',
+      color: 'emerald'
+    },
+    'DIVERGENCIA': {
+      title: 'Notificar Correção Necessária',
+      icon: <AlertCircle className="w-8 h-8 text-red-500" />,
+      suggestion: 'Identificamos uma divergência na sua Nota Fiscal. Por favor, verifique os detalhes no sistema e realize a correção.',
+      buttonText: 'Solicitar Correção de NF',
+      color: 'red'
+    },
+    'PAGO': {
+      title: 'Enviar Recibo de Quitação',
+      icon: <FileText className="w-8 h-8 text-purple-500" />,
+      suggestion: 'Informamos que o ciclo deste repasse foi concluído com sucesso. Segue o recibo de quitação para seus registros.',
+      buttonText: 'Enviar Recibo Final',
+      color: 'purple'
+    },
+    'FINALIZADO': {
+      title: 'Enviar Recibo de Quitação',
+      icon: <FileText className="w-8 h-8 text-purple-500" />,
+      suggestion: 'Informamos que o ciclo deste repasse foi concluído com sucesso. Segue o recibo de quitação para seus registros.',
+      buttonText: 'Enviar Recibo Final',
+      color: 'purple'
+    },
+    'DEFAULT': {
+      title: 'Notificar Parceiro',
+      icon: <Bell className="w-8 h-8 text-slate-500" />,
+      suggestion: 'Olá parceiro, gostaria de falar sobre o repasse em questão.',
+      buttonText: 'Enviar Mensagem',
+      color: 'slate'
+    }
+  }
 
   const STATUS_OPTIONS = [
     { value: 'AGUARDANDO_NF', label: 'Aguardando NF' },
@@ -578,6 +650,13 @@ const RepasseList = () => {
                         <td className="px-6 py-4 text-center">
                           <div className="relative inline-block">
                             <button
+                              onClick={() => setNotifyModal(tx)}
+                              className="p-1.5 rounded-md hover:bg-primary/10 transition-colors text-muted-foreground hover:text-primary"
+                              title="Notificar Parceiro"
+                            >
+                              <span className="text-lg font-bold">#</span>
+                            </button>
+                            <button
                               onClick={() => setStatusMenuOpen(statusMenuOpen === tx.id ? null : tx.id)}
                               className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                             >
@@ -894,6 +973,70 @@ const RepasseList = () => {
                 >
                   Fechar
                 </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Notify Modal */}
+      {notifyModal && (() => {
+        const config = NOTIFY_CONFIG[notifyModal.status] || NOTIFY_CONFIG['DEFAULT']
+        return (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setNotifyModal(null)}>
+            <div className="bg-card w-full max-w-md rounded-xl border border-border shadow-lg p-8 relative overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Decoration */}
+              <div className={`absolute -top-12 -right-12 w-32 h-32 bg-${config.color}-500/10 rounded-full blur-3xl`} />
+              
+              <button type="button" onClick={() => setNotifyModal(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex flex-col items-center text-center">
+                <div className={`mb-6 p-4 rounded-2xl bg-${config.color}-500/10 border border-${config.color}-500/20`}>
+                  {config.icon}
+                </div>
+                
+                <h3 className="text-xl font-bold text-foreground mb-2">
+                  {config.title}
+                </h3>
+                
+                <p className="text-xs font-medium text-muted-foreground mb-6 uppercase tracking-widest">
+                  Transação #{notifyModal.id}
+                </p>
+
+                <div className="w-full bg-muted/30 rounded-xl p-5 border border-border text-left mb-8">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase mb-2 block">Prévia da Mensagem:</span>
+                  <div className="text-sm text-foreground leading-relaxed italic whitespace-pre-wrap">
+                    <p className="mb-4 font-semibold">"{config.suggestion}"</p>
+                    <div className="text-[11px] text-muted-foreground space-y-1 pt-3 border-t border-border/50">
+                      <p>--- DETALHES ---</p>
+                      <p>ID: #{notifyModal.id}</p>
+                      <p>Data: {formatDate(notifyModal)}</p>
+                      <p>Parceiro: {notifyModal.parceiro_nome || 'N/A'}</p>
+                      <p>Cliente: {notifyModal.nome_cliente || 'N/A'}</p>
+                      <p>Valor: {formatCurrency(notifyModal.valor_liberado)}</p>
+                      <p>Status: {notifyModal.status}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <a
+                  href={generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal)}
+                  onClick={() => setNotifyModal(null)}
+                  className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl text-white font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-lg ${
+                    config.color === 'emerald' ? 'bg-emerald-600 shadow-emerald-500/20' : 
+                    config.color === 'red' ? 'bg-red-600 shadow-red-500/20' : 
+                    config.color === 'blue' ? 'bg-primary shadow-primary/20' : 
+                    'bg-purple-600 shadow-purple-500/20'
+                  }`}
+                >
+                  <Mail className="w-5 h-5" /> {config.buttonText}
+                </a>
+                
+                <p className="mt-4 text-[10px] text-muted-foreground">
+                  O link abrirá seu cliente de e-mail padrão.
+                </p>
               </div>
             </div>
           </div>

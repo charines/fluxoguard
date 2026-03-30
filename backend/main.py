@@ -190,6 +190,7 @@ def serialize_transaction(tx: Transaction, current_user: Optional[User] = None) 
         "user_id": tx.parceiro_id,
         "parceiro_id": tx.parceiro_id,
         "parceiro_nome": tx.parceiro.nome if tx.parceiro else None,
+        "parceiro_email": tx.parceiro.email if tx.parceiro else None,
         "ano": tx.ano,
         "mes": tx.mes,
         "dia": tx.dia,
