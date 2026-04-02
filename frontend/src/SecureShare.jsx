@@ -223,29 +223,27 @@ const SecureShare = () => {
               )}
             </div>
 
-            {/* Document Buttons */}
+            {/* Document Indicators (View Only) */}
             <div className="pt-8 space-y-3">
               <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-center mb-1">Documentação Disponível</p>
               
               <div className="grid grid-cols-2 gap-4">
                 {transaction?.notas_fiscais?.length > 0 && (
-                  <button 
-                    onClick={() => handleDownload(transaction.notas_fiscais[0])}
-                    className="flex flex-col items-center gap-2 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl hover:bg-blue-500/20 transition-all group"
+                  <div 
+                    className="flex flex-col items-center gap-2 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl opacity-80 cursor-default"
                   >
-                    <FileText className="w-6 h-6 text-blue-500 group-hover:scale-110 transition-transform" />
+                    <FileText className="w-6 h-6 text-blue-500 transition-transform" />
                     <span className="text-[10px] font-bold text-blue-500 uppercase">Nota Fiscal</span>
-                  </button>
+                  </div>
                 )}
                 
                 {transaction?.comprovantes?.length > 0 && (
-                  <button 
-                    onClick={() => handleDownload(transaction.comprovantes[0])}
-                    className="flex flex-col items-center gap-2 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl hover:bg-emerald-500/20 transition-all group"
+                  <div 
+                    className="flex flex-col items-center gap-2 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl opacity-80 cursor-default"
                   >
-                    <ImageIcon className="w-6 h-6 text-emerald-500 group-hover:scale-110 transition-transform" />
+                    <ImageIcon className="w-6 h-6 text-emerald-500 transition-transform" />
                     <span className="text-[10px] font-bold text-emerald-500 uppercase">Comprovante</span>
-                  </button>
+                  </div>
                 )}
 
                 {(!transaction?.notas_fiscais?.length && !transaction?.comprovantes?.length) && (
