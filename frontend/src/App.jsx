@@ -127,18 +127,22 @@ const DashboardLayout = ({ title, children }) => {
 const UnifiedLogin = () => {
   const navigate = useNavigate()
   const [identifier, setIdentifier] = useState('')
-  const [code, setCode] = useState('')
+  const [c1, setC1] = useState('')
+  const [c2, setC2] = useState('')
+  const [c3, setC3] = useState('')
+  const [c4, setC4] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const handleLogin = async (event) => {
     event.preventDefault()
 
-    if (!identifier.trim() || !code.trim()) {
-      setError('Informe Email ou CNPJ e o código.')
+    if (!identifier.trim() || !c1 || !c2 || !c3 || !c4) {
+      setError('Por favor, preencha todos os campos do código.')
       return
     }
 
+    const code = `${c1}-${c2}${c3}${c4}`
     setLoading(true)
     setError(null)
 
@@ -191,40 +195,70 @@ const UnifiedLogin = () => {
           </div>
 
           <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5 block ml-1">Código de Acesso</label>
-            <input
-              type="password"
-              value={code}
-              onChange={(e) => {
-                let val = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
-                if (val.length > 7) val = val.substring(0, 7);
-                
-                let formatted = '';
-                const letters_0_3 = val.substring(0, 3).replace(/[^a-z]/g, '');
-                formatted += letters_0_3;
-                
-                if (val.length > 3) {
-                  formatted += '-';
-                  const digit_4 = val.charAt(3).replace(/\D/g, '');
-                  formatted += digit_4;
-                  
-                  if (val.length > 4) {
-                    const letter_5 = val.charAt(4).replace(/[^a-z]/g, '');
-                    formatted += letter_5;
-                    
-                    if (val.length > 5) {
-                      const digits_6_7 = val.substring(5, 7).replace(/\D/g, '');
-                      formatted += digits_6_7;
-                    }
-                  }
-                }
-                
-                if (formatted.endsWith('-') && val.length <= 3) formatted = formatted.slice(0, -1);
-                setCode(formatted);
-              }}
-              placeholder="123123"
-              className="w-full bg-background/50 border border-white/10 rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all placeholder:text-muted-foreground/30"
-            />
+            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3 block ml-1">Código de Acesso (abc-1a23)</label>
+            <div className="flex items-center gap-2">
+              <input
+                id="c1"
+                type="text"
+                maxLength={3}
+                placeholder="abc"
+                value={c1}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+                  setC1(val);
+                  if (val.length === 3) document.getElementById('c2').focus();
+                }}
+                className="w-full bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              />
+              <span className="text-muted-foreground font-bold">-</span>
+              <input
+                id="c2"
+                type="text"
+                maxLength={1}
+                placeholder="1"
+                value={c2}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setC2(val);
+                  if (val.length === 1) document.getElementById('c3').focus();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !c2) document.getElementById('c1').focus();
+                }}
+                className="w-16 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              />
+              <input
+                id="c3"
+                type="text"
+                maxLength={1}
+                placeholder="a"
+                value={c3}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+                  setC3(val);
+                  if (val.length === 1) document.getElementById('c4').focus();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !c3) document.getElementById('c2').focus();
+                }}
+                className="w-16 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              />
+              <input
+                id="c4"
+                type="text"
+                maxLength={2}
+                placeholder="23"
+                value={c4}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setC4(val);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !c4) document.getElementById('c3').focus();
+                }}
+                className="w-full bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              />
+            </div>
           </div>
         </div>
 
@@ -535,6 +569,10 @@ const EditUserPage = () => {
   const [email, setEmail] = useState('')
   const [telefone, setTelefone] = useState('')
   const [password, setPassword] = useState('')
+  const [pass1, setPass1] = useState('')
+  const [pass2, setPass2] = useState('')
+  const [pass3, setPass3] = useState('')
+  const [pass4, setPass4] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -583,13 +621,17 @@ const EditUserPage = () => {
       return
     }
 
+    const finalPassword = (pass1.length === 3 && pass2.length === 1 && pass3.length === 1 && pass4.length === 2) 
+      ? `${pass1}-${pass2}${pass3}${pass4}` 
+      : undefined;
+
     setSaving(true)
     try {
       const updated = await updateUser(targetUser.id, {
         nome: nome.trim(),
         email: email.trim(),
         telefone: telefone.trim(),
-        password: password.trim() || undefined
+        password: finalPassword
       })
 
       if (loggedUser && loggedUser.id === updated.id) {
@@ -646,47 +688,73 @@ const EditUserPage = () => {
             />
 
             <label className="block text-sm text-gray-700 mb-1 font-bold">Nova Senha (Opcional)</label>
-            <input
-              type="text"
-              value={password}
-              onChange={(e) => {
-                let val = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
-                if (val.length > 7) val = val.substring(0, 7);
-                
-                let formatted = '';
-                // 3 letras (abc)
-                const letters_0_3 = val.substring(0, 3).replace(/[^a-z]/g, '');
-                formatted += letters_0_3;
-                
-                if (val.length > 3) {
-                  formatted += '-';
-                  // 1 numero (1)
-                  const digit_4 = val.charAt(3).replace(/\D/g, '');
-                  formatted += digit_4;
-                  
-                  if (val.length > 4) {
-                    // 1 letra (a)
-                    const letter_5 = val.charAt(4).replace(/[^a-z]/g, '');
-                    formatted += letter_5;
-                    
-                    if (val.length > 5) {
-                      // 2 numeros (23)
-                      const digits_6_7 = val.substring(5, 7).replace(/\D/g, '');
-                      formatted += digits_6_7;
-                    }
-                  }
-                }
-                
-                // Limpeza final para remover hifens órfãos
-                if (formatted.endsWith('-') && val.length <= 3) {
-                   formatted = formatted.slice(0, -1);
-                }
-
-                setPassword(formatted);
-              }}
-              placeholder="Deixe em branco para não alterar"
-              className="w-full border-2 border-primary/20 rounded px-3 py-2 mb-4 focus:border-primary outline-none transition-all"
-            />
+            <div className="flex items-center gap-2 mb-6">
+              <input
+                id="p1"
+                type="text"
+                maxLength={3}
+                placeholder="abc"
+                value={pass1}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+                  setPass1(val);
+                  if (val.length === 3) document.getElementById('p2').focus();
+                }}
+                className="w-16 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+              />
+              <span className="text-muted-foreground font-bold">-</span>
+              <input
+                id="p2"
+                type="text"
+                maxLength={1}
+                placeholder="1"
+                value={pass2}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setPass2(val);
+                  if (val.length === 1) document.getElementById('p3').focus();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !pass2) document.getElementById('p1').focus();
+                }}
+                className="w-12 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+              />
+              <input
+                id="p3"
+                type="text"
+                maxLength={1}
+                placeholder="a"
+                value={pass3}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+                  setPass3(val);
+                  if (val.length === 1) document.getElementById('p4').focus();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !pass3) document.getElementById('p2').focus();
+                }}
+                className="w-12 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+              />
+              <input
+                id="p4"
+                type="text"
+                maxLength={2}
+                placeholder="23"
+                value={pass4}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setPass4(val);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !pass4) document.getElementById('p3').focus();
+                }}
+                className="w-16 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+              />
+            </div>
+            
+            <p className="text-[10px] text-muted-foreground -mt-4 mb-4">
+              Padrão: 3 letras - 1 número + 1 letra + 2 números
+            </p>
 
             <div className="text-xs text-gray-500 mb-5">
               CPF/CNPJ e Tipo não podem ser alterados nesta tela.
