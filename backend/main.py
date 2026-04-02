@@ -636,8 +636,34 @@ def list_transactions(
 def download_file(
     file_path: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    authorization: Optional[str] = Header(default=None),
+    x_magic_token: Optional[str] = Header(default=None),
 ):
+    current_user: Optional[User] = None
+    
+    if authorization:
+        try:
+            current_user = get_current_user(authorization, db)
+        except HTTPException:
+            pass
+            
+    if not current_user and x_magic_token:
+        # Tentar validar via Magic Token
+        decrypted = decrypt_cryptojs_aes(x_magic_token, MAGIC_SECRET)
+        if decrypted:
+            try:
+                payload = json.loads(decrypted)
+                link_tx_id = payload.get("id")
+                # Verificar se o arquivo solicitado pertence à transação do token
+                tx = find_transaction_by_file_path(db, file_path)
+                if tx and tx.id == link_tx_id:
+                    current_user = tx.parceiro
+            except Exception:
+                pass
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Autenticação necessária")
+
     normalized = file_path.lstrip("/").replace("\\", "/")
     if normalized.startswith("uploads/"):
         normalized = normalized[len("uploads/"):]
@@ -767,8 +793,36 @@ async def upload_nf(
     transaction_id: int,
     notas_fiscais: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
-    current_partner: User = Depends(get_current_partner),
+    authorization: Optional[str] = Header(default=None),
+    x_magic_token: Optional[str] = Header(default=None),
 ):
+    current_partner: Optional[User] = None
+
+    if authorization:
+        try:
+            user = get_current_user(authorization, db)
+            if user.tipo == "PARCEIRO":
+                current_partner = user
+        except HTTPException:
+            pass
+
+    if not current_partner and x_magic_token:
+        # Tentar validar via Magic Token para upload
+        decrypted = decrypt_cryptojs_aes(x_magic_token, MAGIC_SECRET)
+        if decrypted:
+            try:
+                payload = json.loads(decrypted)
+                link_tx_id = payload.get("id")
+                if link_tx_id == transaction_id:
+                    tx_check = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+                    if tx_check:
+                        current_partner = tx_check.parceiro
+            except Exception:
+                pass
+
+    if not current_partner:
+        raise HTTPException(status_code=401, detail="Acesso restrito ao parceiro proprietário")
+
     if len(notas_fiscais) == 0:
         raise HTTPException(status_code=400, detail="Envie ao menos 1 arquivo.")
     if len(notas_fiscais) > 5:

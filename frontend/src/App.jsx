@@ -208,7 +208,7 @@ const UnifiedLogin = () => {
                   setC1(val);
                   if (val.length === 3) document.getElementById('c2').focus();
                 }}
-                className="w-full bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+                className="flex-1 min-w-0 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
               />
               <span className="text-muted-foreground font-bold">-</span>
               <input
@@ -225,7 +225,7 @@ const UnifiedLogin = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Backspace' && !c2) document.getElementById('c1').focus();
                 }}
-                className="w-16 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+                className="w-12 flex-shrink-0 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
               />
               <input
                 id="c3"
@@ -241,7 +241,7 @@ const UnifiedLogin = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Backspace' && !c3) document.getElementById('c2').focus();
                 }}
-                className="w-16 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+                className="w-12 flex-shrink-0 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
               />
               <input
                 id="c4"
@@ -256,7 +256,7 @@ const UnifiedLogin = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Backspace' && !c4) document.getElementById('c3').focus();
                 }}
-                className="w-full bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+                className="flex-1 min-w-0 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
               />
             </div>
           </div>
@@ -766,7 +766,7 @@ const EditUserPage = () => {
                   setPass1(val);
                   if (val.length === 3) document.getElementById('p2').focus();
                 }}
-                className="w-16 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+                className="flex-1 min-w-0 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
               />
               <span className="text-muted-foreground font-bold">-</span>
               <input
@@ -783,7 +783,7 @@ const EditUserPage = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Backspace' && !pass2) document.getElementById('p1').focus();
                 }}
-                className="w-12 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+                className="w-11 flex-shrink-0 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
               />
               <input
                 id="p3"
@@ -799,7 +799,7 @@ const EditUserPage = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Backspace' && !pass3) document.getElementById('p2').focus();
                 }}
-                className="w-12 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+                className="w-11 flex-shrink-0 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
               />
               <input
                 id="p4"
@@ -814,7 +814,7 @@ const EditUserPage = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Backspace' && !pass4) document.getElementById('p3').focus();
                 }}
-                className="w-16 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+                className="flex-1 min-w-0 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
               />
             </div>
             
