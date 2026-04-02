@@ -80,7 +80,6 @@ export const createRepasse = async (formData) => {
   const response = await api.post('/transactions', formData, {
     headers: {
       ...getAuthHeaders(),
-      'Content-Type': 'multipart/form-data',
     },
   });
   return response.data;
@@ -97,7 +96,6 @@ export const updateRepasse = async (transactionId, formData) => {
   const response = await api.patch(`/transactions/${transactionId}`, formData, {
     headers: {
       ...getAuthHeaders(),
-      'Content-Type': 'multipart/form-data',
     },
   });
   return response.data;
@@ -117,7 +115,6 @@ export const uploadNotasFiscais = async (transactionId, files) => {
   const response = await api.patch(`/transactions/${transactionId}/upload-nf`, formData, {
     headers: {
       ...getAuthHeaders(),
-      'Content-Type': 'multipart/form-data',
     },
   });
   return response.data;
@@ -145,7 +142,6 @@ export const approvePaymentBatch = async (transactionIds, files) => {
   const response = await api.patch('/transactions/batch/approve-payment', formData, {
     headers: {
       ...getAuthHeaders(),
-      'Content-Type': 'multipart/form-data',
     },
   });
   return response.data;

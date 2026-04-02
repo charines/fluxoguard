@@ -10,3 +10,7 @@ email-validator
 supabase
 PyJWT
 pycryptodome
+pytest
+httpx
+pytest-asyncio
+pytest-mock

@@ -4,6 +4,7 @@ import CryptoJS from 'crypto-js'
 const MAGIC_SECRET = import.meta.env.VITE_MAGIC_LINK_SECRET || 'fluxoguard_secure_key_2026'
 import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, CheckCircle2, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail, ChevronLeft, ChevronRight, ChevronDown, ExternalLink, ShieldCheck, Copy, Building2 } from 'lucide-react'
 import {
+  createRepasse,
   changeTransactionStatus,
   downloadFile,
   finalizeTransactionsBatch,
