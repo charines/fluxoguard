@@ -76,6 +76,37 @@ const RepasseList = ({ onStatsChange }) => {
   const [statusMenuOpen, setStatusMenuOpen] = useState(null) // tx.id or null
   const [notifyModal, setNotifyModal] = useState(null) // tx or null
   const [emailPreview, setEmailPreview] = useState(null) // { to, subject, body, magicLink } or null
+  const STATUS_FILTER_OPTIONS = [
+    { value: 'AGUARDANDO_NF', label: 'Aguardando NF', color: 'blue', icon: <Clock className="w-3.5 h-3.5" /> },
+    { value: 'AGUARDANDO_APROVACAO', label: 'Aprovação', color: 'amber', icon: <AlertTriangle className="w-3.5 h-3.5" /> },
+    { value: 'PAGO', label: 'Pago', color: 'emerald', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+    { value: 'FINALIZADO', label: 'Finalizado', color: 'slate', icon: <Lock className="w-3.5 h-3.5" /> },
+    { value: 'DIVERGENCIA', label: 'Divergência', color: 'red', icon: <AlertCircle className="w-4 h-4" /> },
+  ]
+
+  const [activeStatuses, setActiveStatuses] = useState(() => {
+    const saved = localStorage.getItem('fluxoguard_active_statuses')
+    try {
+      return saved ? JSON.parse(saved) : STATUS_FILTER_OPTIONS.map(s => s.value)
+    } catch {
+      return STATUS_FILTER_OPTIONS.map(s => s.value)
+    }
+  })
+
+  useEffect(() => {
+    localStorage.setItem('fluxoguard_active_statuses', JSON.stringify(activeStatuses))
+  }, [activeStatuses])
+
+  const toggleStatusFilter = (status) => {
+    setActiveStatuses(prev => {
+      if (prev.includes(status)) {
+        if (prev.length === 1) return prev
+        return prev.filter(s => s !== status)
+      }
+      return [...prev, status]
+    })
+  }
+
   const itemsPerPage = 5
   const [currentPage, setCurrentPage] = useState(1)
 
@@ -99,10 +130,10 @@ const RepasseList = ({ onStatsChange }) => {
   const generateMailtoLink = (parceiroEmail, status, transacaoId, tx) => {
     const config = NOTIFY_CONFIG[status] || NOTIFY_CONFIG['DEFAULT']
     const subject = encodeURIComponent(`[FluxoGuard] Atualização da Transação #${transacaoId}`)
-    
+
     const dataStr = formatDate(tx);
     const valorStr = formatCurrency(tx.valor_liberado);
-    
+
     // MAGIC LINK LOGIC
     const payload = JSON.stringify({
       id: transacaoId,
@@ -250,7 +281,7 @@ const RepasseList = ({ onStatsChange }) => {
   const existingCount = useMemo(() => (editing?.comprovantes?.length || 0), [editing])
   const remainingSlots = useMemo(() => Math.max(0, 5 - existingCount), [existingCount])
 
-  
+
   useEffect(() => {
     if (isAdmin) {
       getUsersByType('PARCEIRO').then(data => {
@@ -279,13 +310,13 @@ const RepasseList = ({ onStatsChange }) => {
     formData.append('mes', m)
     formData.append('dia', d)
     formData.append('nome_cliente', newRepasseData.nomeCliente)
-    
+
     const valString = newRepasseData.valorLiberado.replace(/\D/g, '')
-    const valFloat = (Number(valString)/100).toFixed(2)
+    const valFloat = (Number(valString) / 100).toFixed(2)
     formData.append('valor_liberado', valFloat)
-    
+
     newRepasseData.files.forEach(f => formData.append('comprovantes', f))
-    
+
     setSaving(true)
     try {
       await createRepasse(formData)
@@ -298,25 +329,25 @@ const RepasseList = ({ onStatsChange }) => {
       setSaving(false)
     }
   }
-  
+
   const StatusBadge = ({ status, minimal = false }) => {
     if (minimal) {
-       switch (status) {
-          case 'PAGO':
-          case 'LIBERADO':
-             return <span className="flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200 uppercase tracking-tight"><CheckCircle2 className="w-3 h-3" /> Pago</span>
-          case 'AGUARDANDO_NF':
-             return <span className="flex items-center gap-1 text-[10px] font-black text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 uppercase tracking-tight"><FileText className="w-3 h-3" /> Aguardando NF</span>
-          case 'AGUARDANDO_APROVACAO':
-          case 'CONFERENCIA':
-             return <span className="flex items-center gap-1 text-[10px] font-black text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200 uppercase tracking-tight"><AlertTriangle className="w-3 h-3" /> Aprovação</span>
-          case 'DIVERGENCIA':
-             return <span className="flex items-center gap-1 text-[10px] font-black text-red-700 bg-red-50 px-2 py-1 rounded-lg border border-red-200 uppercase tracking-tight"><AlertCircle className="w-3 h-3" /> Divergência</span>
-          case 'FINALIZADO':
-             return <span className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-2 py-1 rounded-lg uppercase tracking-tight shadow-sm"><Lock className="w-3 h-3" /> Finalizado</span>
-          default:
-             return <span className="flex items-center gap-1 text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 uppercase tracking-tight">{status}</span>
-       }
+      switch (status) {
+        case 'PAGO':
+        case 'LIBERADO':
+          return <span className="flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200 uppercase tracking-tight"><CheckCircle2 className="w-3 h-3" /> Pago</span>
+        case 'AGUARDANDO_NF':
+          return <span className="flex items-center gap-1 text-[10px] font-black text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 uppercase tracking-tight"><FileText className="w-3 h-3" /> Aguardando NF</span>
+        case 'AGUARDANDO_APROVACAO':
+        case 'CONFERENCIA':
+          return <span className="flex items-center gap-1 text-[10px] font-black text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200 uppercase tracking-tight"><AlertTriangle className="w-3 h-3" /> Aprovação</span>
+        case 'DIVERGENCIA':
+          return <span className="flex items-center gap-1 text-[10px] font-black text-red-700 bg-red-50 px-2 py-1 rounded-lg border border-red-200 uppercase tracking-tight"><AlertCircle className="w-3 h-3" /> Divergência</span>
+        case 'FINALIZADO':
+          return <span className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-2 py-1 rounded-lg uppercase tracking-tight shadow-sm"><Lock className="w-3 h-3" /> Finalizado</span>
+        default:
+          return <span className="flex items-center gap-1 text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 uppercase tracking-tight">{status}</span>
+      }
     }
     switch (status) {
       case 'AGUARDANDO_NF':
@@ -337,8 +368,13 @@ const RepasseList = ({ onStatsChange }) => {
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium tracking-wide bg-secondary text-secondary-foreground border border-border">{status}</span>
     }
   }
-  
+
   const filteredRows = rows.filter(tx => {
+    const matchStatus = activeStatuses.includes(tx.status) ||
+      (tx.status === 'LIBERADO' && activeStatuses.includes('PAGO')) ||
+      (tx.status === 'CONFERENCIA' && activeStatuses.includes('AGUARDANDO_APROVACAO'))
+    if (!matchStatus) return false
+
     const matchSearch = tx.nome_cliente?.toLowerCase().includes(searchTerm.toLowerCase()) || tx.parceiro_nome?.toLowerCase().includes(searchTerm.toLowerCase())
     if (searchTerm && !matchSearch) return false
     if (dateFilter) {
@@ -617,52 +653,79 @@ const RepasseList = ({ onStatsChange }) => {
 
   return (
     <div className="space-y-6 animate-accordion-down w-full max-w-[100vw]">
-      {isAdmin && (
-        <div className="flex flex-col sm:flex-row items-center gap-4 justify-between bg-card p-4 rounded-lg border border-border mt-4">
-          <div className="flex items-center gap-4 flex-1 w-full">
-            <div className="relative flex-1 max-w-sm">
+      <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-xl mt-6">
+        <div className="p-6 border-b border-border bg-white space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-1 flex-shrink-0">
+              <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">Histórico de Repasses</h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Atividade Recente</p>
+            </div>
+
+            {isAdmin && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={submitBatchFinalize}
+                  disabled={selectedIds.length === 0 || processingBatch}
+                  className="h-9 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 disabled:opacity-50 transition-all font-black text-[10px] uppercase tracking-widest"
+                >
+                  Gerar ZIP
+                </button>
+                <button
+                  onClick={() => setNewRepasseOpen(true)}
+                  className="h-9 flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
+                >
+                  <Plus className="w-4 h-4" /> Novo
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <input 
-                type="text" 
-                placeholder="Buscar por parceiro ou cliente..." 
-                value={searchTerm} 
+              <input
+                type="text"
+                placeholder="Buscar por parceiro ou cliente..."
+                value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full bg-background border border-input rounded-md pl-9 pr-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all"
               />
             </div>
-            <div className="relative">
-              <input 
+
+            <div className="flex flex-wrap items-center gap-3">
+              <input
                 type="date"
                 value={dateFilter}
                 onChange={e => setDateFilter(e.target.value)}
-                className="bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring h-9"
               />
-            </div>
-          </div>
-          <button 
-            onClick={() => setNewRepasseOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors w-full sm:w-auto"
-          >
-            <Plus className="w-4 h-4" /> Novo Repasse
-          </button>
-        </div>
-      )}
 
-      <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm">
-        {isAdmin && (
-          <div className="p-4 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-4">
-            <h3 className="font-semibold text-foreground">Histórico de Repasses</h3>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={submitBatchFinalize}
-                disabled={selectedIds.length === 0 || processingBatch}
-                className="text-xs px-3 py-2 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border disabled:opacity-50 transition-colors"
-              >
-                Finalizar e Gerar ZIP
-              </button>
+              <div className="flex items-center gap-1.5 sm:border-l sm:border-slate-100 sm:pl-4">
+                {STATUS_FILTER_OPTIONS.map(opt => {
+                  const isActive = activeStatuses.includes(opt.value)
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => toggleStatusFilter(opt.value)}
+                      title={opt.label}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border shadow-sm active:scale-95 ${isActive
+                        ? opt.color === 'slate' ? 'bg-slate-900 border-slate-900 text-white' :
+                          opt.color === 'blue' ? 'bg-blue-600 border-blue-600 text-white' :
+                            opt.color === 'amber' ? 'bg-amber-500 border-amber-500 text-white' :
+                              opt.color === 'emerald' ? 'bg-emerald-600 border-emerald-600 text-white' :
+                                'bg-red-600 border-red-600 text-white'
+                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                        }`}
+                    >
+                      {opt.icon}
+                      <span className="hidden lg:inline">{opt.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
         {loading ? (
           <div className="p-10 text-center text-muted-foreground">Carregando repasses...</div>
@@ -748,11 +811,10 @@ const RepasseList = ({ onStatsChange }) => {
                                       <button
                                         key={opt.value}
                                         onClick={() => handleChangeStatus(tx, opt.value)}
-                                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
-                                          tx.status === opt.value
-                                            ? 'bg-primary/10 text-primary font-semibold'
-                                            : 'text-foreground hover:bg-muted'
-                                        }`}
+                                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${tx.status === opt.value
+                                          ? 'bg-primary/10 text-primary font-semibold'
+                                          : 'text-foreground hover:bg-muted'
+                                          }`}
                                       >
                                         {tx.status === opt.value ? (
                                           <Check className="w-4 h-4 text-primary" />
@@ -781,16 +843,7 @@ const RepasseList = ({ onStatsChange }) => {
               </table>
             </div>
 
-            {/* Mobile Header (Independent) */}
-            <div className="md:hidden bg-white p-6 border-b border-slate-100 shadow-sm flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-black text-slate-800 tracking-tight">Histórico de Repasses</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Atividade Recente</p>
-              </div>
-              <button className="text-xs font-black text-indigo-600 flex items-center gap-1 active:scale-95 transition-transform uppercase">
-                See All <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
+
 
             {/* Mobile Cards List (Full Width) */}
             <div className="md:hidden space-y-4 py-4 bg-transparent">
@@ -798,129 +851,127 @@ const RepasseList = ({ onStatsChange }) => {
                 <div key={tx.id} className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm space-y-4 relative overflow-hidden active:bg-slate-50 transition-colors">
                   <div className="flex justify-between items-start gap-4">
                     <div className="min-w-0 flex-1">
-                       <h5 className="font-black text-slate-800 text-[15px] leading-tight truncate">{tx.nome_cliente || 'N/A'}</h5>
-                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-1">
-                             <span>{formatDate(tx)}</span>
-                             <span className="w-1 h-1 rounded-full bg-slate-200"></span>
-                             <span>Ref: #{tx.id}</span>
-                          </div>
-                          {isAdmin && (
-                            <p className="text-[10px] font-black text-indigo-600 mt-1.5 flex items-center gap-1 uppercase">
-                                <ShieldCheck className="w-3 h-3" /> {tx.parceiro_nome}
-                            </p>
-                          )}
+                      <h5 className="font-black text-slate-800 text-[15px] leading-tight truncate">{tx.nome_cliente || 'N/A'}</h5>
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-1">
+                        <span>{formatDate(tx)}</span>
+                        <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                        <span>Ref: #{tx.id}</span>
+                      </div>
+                      {isAdmin && (
+                        <p className="text-[10px] font-black text-indigo-600 mt-1.5 flex items-center gap-1 uppercase">
+                          <ShieldCheck className="w-3 h-3" /> {tx.parceiro_nome}
+                        </p>
+                      )}
 
-                          {/* Dynamic File Links / ZIP */}
-                          <div className="flex items-center gap-4 mt-2">
-                            {tx.status === 'FINALIZADO' && tx.zip_contabilidade_url && isAdmin ? (
-                               <FileCell tx={tx} type="COMPROVANTE" />
-                            ) : (
-                               <>
-                                 <FileCell tx={tx} type="NF" />
-                                 <div className="w-px h-2.5 bg-slate-100"></div>
-                                 <FileCell tx={tx} type="COMPROVANTE" />
-                               </>
-                            )}
-                          </div>
-                       </div>
+                      {/* Dynamic File Links / ZIP */}
+                      <div className="flex items-center gap-4 mt-2">
+                        {tx.status === 'FINALIZADO' && tx.zip_contabilidade_url && isAdmin ? (
+                          <FileCell tx={tx} type="COMPROVANTE" />
+                        ) : (
+                          <>
+                            <FileCell tx={tx} type="NF" />
+                            <div className="w-px h-2.5 bg-slate-100"></div>
+                            <FileCell tx={tx} type="COMPROVANTE" />
+                          </>
+                        )}
+                      </div>
+                    </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                       <span className="text-[15px] font-black text-slate-900 tracking-tighter">{formatCurrency(tx.valor_liberado)}</span>
-                       <StatusBadge status={tx.status} minimal={true} />
+                      <span className="text-[15px] font-black text-slate-900 tracking-tighter">{formatCurrency(tx.valor_liberado)}</span>
+                      <StatusBadge status={tx.status} minimal={true} />
                     </div>
                   </div>
 
 
                   {isAdmin && (
                     <div className="flex items-center justify-between pt-3 border-t border-slate-100 gap-2">
-                       <div className="flex gap-2">
-                          <button onClick={() => setNotifyModal(tx)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 text-blue-600 active:bg-blue-100 transition-colors">
-                            <Mail className="w-4 h-4" />
-                            <span className="text-[10px] font-black uppercase tracking-tight">Notificar</span>
-                          </button>
-                          <input
-                             type="checkbox"
-                             checked={!!selectedMap[tx.id]}
-                             disabled={tx.status === 'FINALIZADO'}
-                             onChange={() => toggleRow(tx.id)}
-                             className="rounded-lg border-slate-200 text-indigo-600 focus:ring-indigo-500 w-8 h-8 shadow-sm flex-shrink-0 cursor-pointer"
-                          />
-                       </div>
-                       <button 
+                      <div className="flex gap-2">
+                        <button onClick={() => setNotifyModal(tx)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 text-blue-600 active:bg-blue-100 transition-colors">
+                          <Mail className="w-4 h-4" />
+                          <span className="text-[10px] font-black uppercase tracking-tight">Notificar</span>
+                        </button>
+                        <input
+                          type="checkbox"
+                          checked={!!selectedMap[tx.id]}
+                          disabled={tx.status === 'FINALIZADO'}
+                          onChange={() => toggleRow(tx.id)}
+                          className="rounded-lg border-slate-200 text-indigo-600 focus:ring-indigo-500 w-8 h-8 shadow-sm flex-shrink-0 cursor-pointer"
+                        />
+                      </div>
+                      <button
                         onClick={() => setStatusMenuOpen(statusMenuOpen === tx.id ? null : tx.id)}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-md active:scale-95"
-                       >
-                         Alterar Status <ChevronDown className={`w-3.5 h-3.5 transition-transform ${statusMenuOpen === tx.id ? 'rotate-180' : ''}`} />
-                       </button>
+                      >
+                        Alterar Status <ChevronDown className={`w-3.5 h-3.5 transition-transform ${statusMenuOpen === tx.id ? 'rotate-180' : ''}`} />
+                      </button>
                     </div>
                   )}
 
                   {/* Status Menu Overlay */}
                   {statusMenuOpen === tx.id && isAdmin && (
                     <div className="animate-in slide-in-from-top-2 duration-200 pt-2">
-                       <div className="bg-slate-900 rounded-2xl overflow-hidden shadow-xl grid grid-cols-1 divide-y divide-slate-800 border border-slate-800">
-                          {STATUS_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              onClick={() => handleChangeStatus(tx, opt.value)}
-                              className={`w-full flex items-center justify-between px-5 py-3.5 text-xs font-bold transition-all ${
-                                tx.status === opt.value ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white active:bg-slate-800'
+                      <div className="bg-slate-900 rounded-2xl overflow-hidden shadow-xl grid grid-cols-1 divide-y divide-slate-800 border border-slate-800">
+                        {STATUS_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => handleChangeStatus(tx, opt.value)}
+                            className={`w-full flex items-center justify-between px-5 py-3.5 text-xs font-bold transition-all ${tx.status === opt.value ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white active:bg-slate-800'
                               }`}
-                            >
-                              {opt.label}
-                              {tx.status === opt.value && <Check className="w-3.5 h-3.5" />}
-                            </button>
-                          ))}
-                       </div>
+                          >
+                            {opt.label}
+                            {tx.status === opt.value && <Check className="w-3.5 h-3.5" />}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
               ))}
-              
+
               {filteredRows.length === 0 && (
                 <div className="p-10 text-center text-slate-400 font-bold italic text-sm bg-white rounded-3xl border border-dashed border-slate-200">
-                    Nenhum repasse encontrado.
+                  Nenhum repasse encontrado.
                 </div>
               )}
             </div>
 
-          {filteredRows.length > 0 && (
-            <div className="px-6 py-4 border-t border-border/50 flex items-center justify-between bg-muted/5">
-              <p className="text-xs text-muted-foreground">
-                Mostrando <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredRows.length)}</span> de <span className="font-medium">{filteredRows.length}</span> registros
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => p - 1)}
-                  className="p-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <div className="flex items-center gap-1 overflow-x-auto max-w-[150px] sm:max-w-none no-scrollbar">
-                  {Array.from({ length: totalPages }).map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentPage(i + 1)}
-                      className={`min-w-[32px] h-8 rounded-md text-xs font-medium transition-colors ${
-                        currentPage === i + 1 
-                        ? 'bg-primary text-white shadow-sm' 
-                        : 'hover:bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
+            {filteredRows.length > 0 && (
+              <div className="px-6 py-4 border-t border-border/50 flex items-center justify-between bg-muted/5">
+                <p className="text-xs text-muted-foreground">
+                  Mostrando <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredRows.length)}</span> de <span className="font-medium">{filteredRows.length}</span> registros
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                    className="p-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center gap-1 overflow-x-auto max-w-[150px] sm:max-w-none no-scrollbar">
+                    {Array.from({ length: totalPages }).map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentPage(i + 1)}
+                        className={`min-w-[32px] h-8 rounded-md text-xs font-medium transition-colors ${currentPage === i + 1
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'hover:bg-muted text-muted-foreground'
+                          }`}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    className="p-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(p => p + 1)}
-                  className="p-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
               </div>
-            </div>
-          )}
+            )}
           </>
         )}
       </div>
@@ -932,13 +983,13 @@ const RepasseList = ({ onStatsChange }) => {
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-bold text-foreground mb-6">Novo Repasse</h2>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Parceiro</label>
                 <select
                   value={newRepasseData.userId}
-                  onChange={e => setNewRepasseData({...newRepasseData, userId: e.target.value})}
+                  onChange={e => setNewRepasseData({ ...newRepasseData, userId: e.target.value })}
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Selecione...</option>
@@ -951,7 +1002,7 @@ const RepasseList = ({ onStatsChange }) => {
                 <input
                   type="date"
                   value={newRepasseData.dateStr}
-                  onChange={e => setNewRepasseData({...newRepasseData, dateStr: e.target.value})}
+                  onChange={e => setNewRepasseData({ ...newRepasseData, dateStr: e.target.value })}
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
                 {newRepasseData.dateStr && (
@@ -964,7 +1015,7 @@ const RepasseList = ({ onStatsChange }) => {
                 <input
                   type="text"
                   value={newRepasseData.nomeCliente}
-                  onChange={e => setNewRepasseData({...newRepasseData, nomeCliente: e.target.value})}
+                  onChange={e => setNewRepasseData({ ...newRepasseData, nomeCliente: e.target.value })}
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="Ex: João da Silva"
                 />
@@ -975,8 +1026,8 @@ const RepasseList = ({ onStatsChange }) => {
                 <input
                   type="text"
                   inputMode="numeric"
-                  value={newRepasseData.valorLiberado ? (Number(newRepasseData.valorLiberado.replace(/\D/g, ''))/100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
-                  onChange={e => setNewRepasseData({...newRepasseData, valorLiberado: e.target.value})}
+                  value={newRepasseData.valorLiberado ? (Number(newRepasseData.valorLiberado.replace(/\D/g, '')) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
+                  onChange={e => setNewRepasseData({ ...newRepasseData, valorLiberado: e.target.value })}
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="R$ 0,00"
                 />
@@ -987,21 +1038,21 @@ const RepasseList = ({ onStatsChange }) => {
                 <input
                   type="file"
                   multiple
-                  onChange={e => setNewRepasseData({...newRepasseData, files: Array.from(e.target.files || [])})}
+                  onChange={e => setNewRepasseData({ ...newRepasseData, files: Array.from(e.target.files || []) })}
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-muted file:text-foreground hover:file:bg-muted/80 transition-colors"
                 />
               </div>
             </div>
 
             <div className="mt-8 flex justify-end gap-3">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setNewRepasseOpen(false)}
                 className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors font-medium text-sm"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 type="submit"
                 disabled={saving}
                 className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 font-medium text-sm transition-colors disabled:opacity-50"
@@ -1032,7 +1083,7 @@ const RepasseList = ({ onStatsChange }) => {
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Nome do Cliente</label>
                 <input
@@ -1207,143 +1258,142 @@ const RepasseList = ({ onStatsChange }) => {
           <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 overflow-y-auto" onClick={() => setNotifyModal(null)}>
             <div className="flex min-h-full items-center justify-center p-4">
               <div className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl p-6 sm:p-8 relative animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-              {/* Decoration */}
-              <div className={`absolute -top-12 -right-12 w-32 h-32 bg-${config.color}-500/10 rounded-full blur-3xl`} />
-              
-              <button type="button" onClick={() => setNotifyModal(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-5 h-5" />
-              </button>
+                {/* Decoration */}
+                <div className={`absolute -top-12 -right-12 w-32 h-32 bg-${config.color}-500/10 rounded-full blur-3xl`} />
 
-              <div className="flex flex-col items-center text-center">
-                <div className={`mb-6 p-4 rounded-2xl bg-${config.color}-500/10 border border-${config.color}-500/20`}>
-                  {config.icon}
-                </div>
-                
-                <h3 className="text-xl font-bold text-foreground mb-2">
-                  {config.title}
-                </h3>
-                
-                <p className="text-xs font-medium text-muted-foreground mb-6 uppercase tracking-widest">
-                  Transação #{notifyModal.id}
-                </p>
+                <button type="button" onClick={() => setNotifyModal(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
 
-                <div className="w-full bg-muted/30 rounded-xl p-5 border border-border text-left mb-8">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase mb-2 block">Prévia da Mensagem:</span>
-                  <div className="text-sm text-foreground leading-relaxed italic whitespace-pre-wrap">
-                    <p className="mb-4 font-semibold">"{config.suggestion}"</p>
-                    <div className="text-[11px] text-muted-foreground space-y-1 pt-3 border-t border-border/50">
-                      <p>--- DETALHES ---</p>
-                      <p>ID: #{notifyModal.id}</p>
-                      <p>Data: {formatDate(notifyModal)}</p>
-                      <p>Parceiro: {notifyModal.parceiro_nome || 'N/A'}</p>
-                      <p>Cliente: {notifyModal.nome_cliente || 'N/A'}</p>
-                      <p>Valor: {formatCurrency(notifyModal.valor_liberado)}</p>
-                      <p>Status: {notifyModal.status}</p>
+                <div className="flex flex-col items-center text-center">
+                  <div className={`mb-6 p-4 rounded-2xl bg-${config.color}-500/10 border border-${config.color}-500/20`}>
+                    {config.icon}
+                  </div>
+
+                  <h3 className="text-xl font-bold text-foreground mb-2">
+                    {config.title}
+                  </h3>
+
+                  <p className="text-xs font-medium text-muted-foreground mb-6 uppercase tracking-widest">
+                    Transação #{notifyModal.id}
+                  </p>
+
+                  <div className="w-full bg-muted/30 rounded-xl p-5 border border-border text-left mb-8">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase mb-2 block">Prévia da Mensagem:</span>
+                    <div className="text-sm text-foreground leading-relaxed italic whitespace-pre-wrap">
+                      <p className="mb-4 font-semibold">"{config.suggestion}"</p>
+                      <div className="text-[11px] text-muted-foreground space-y-1 pt-3 border-t border-border/50">
+                        <p>--- DETALHES ---</p>
+                        <p>ID: #{notifyModal.id}</p>
+                        <p>Data: {formatDate(notifyModal)}</p>
+                        <p>Parceiro: {notifyModal.parceiro_nome || 'N/A'}</p>
+                        <p>Cliente: {notifyModal.nome_cliente || 'N/A'}</p>
+                        <p>Valor: {formatCurrency(notifyModal.valor_liberado)}</p>
+                        <p>Status: {notifyModal.status}</p>
+                      </div>
                     </div>
                   </div>
+
+                  <a
+                    href={generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal).mailto}
+                    onClick={() => setNotifyModal(null)}
+                    className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl text-white font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-lg ${config.color === 'emerald' ? 'bg-emerald-600 shadow-emerald-500/20' :
+                      config.color === 'red' ? 'bg-red-600 shadow-red-500/20' :
+                        config.color === 'blue' ? 'bg-primary shadow-primary/20' :
+                          config.color === 'amber' ? 'bg-amber-600 shadow-amber-500/20' :
+                            'bg-purple-600 shadow-purple-500/20'
+                      }`}
+                  >
+                    <Mail className="w-5 h-5" /> {config.buttonText}
+                  </a>
+
+                  <button
+                    onClick={() => {
+                      const data = generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal);
+                      setEmailPreview(data);
+                    }}
+                    className="mt-3 w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-border bg-background text-foreground hover:bg-muted font-bold text-sm transition-all"
+                  >
+                    <Search className="w-4 h-4" /> Visualizar Detalhes Técnicos (Link)
+                  </button>
+
+                  <p className="mt-4 text-[10px] text-muted-foreground">
+                    O link abrirá seu cliente de e-mail padrão.
+                  </p>
                 </div>
-
-                <a
-                  href={generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal).mailto}
-                  onClick={() => setNotifyModal(null)}
-                  className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl text-white font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-lg ${
-                    config.color === 'emerald' ? 'bg-emerald-600 shadow-emerald-500/20' : 
-                    config.color === 'red' ? 'bg-red-600 shadow-red-500/20' : 
-                    config.color === 'blue' ? 'bg-primary shadow-primary/20' : 
-                    config.color === 'amber' ? 'bg-amber-600 shadow-amber-500/20' : 
-                    'bg-purple-600 shadow-purple-500/20'
-                  }`}
-                >
-                  <Mail className="w-5 h-5" /> {config.buttonText}
-                </a>
-
-                <button
-                  onClick={() => {
-                    const data = generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal);
-                    setEmailPreview(data);
-                  }}
-                  className="mt-3 w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-border bg-background text-foreground hover:bg-muted font-bold text-sm transition-all"
-                >
-                  <Search className="w-4 h-4" /> Visualizar Detalhes Técnicos (Link)
-                </button>
-                
-                <p className="mt-4 text-[10px] text-muted-foreground">
-                  O link abrirá seu cliente de e-mail padrão.
-                </p>
               </div>
             </div>
           </div>
-        </div>
-      )
-    })()}
+        )
+      })()}
 
       {/* Email Preview Modal (Technical) */}
       {emailPreview && (
         <div className="fixed inset-0 bg-background/90 backdrop-blur-md z-[60] overflow-y-auto" onClick={() => setEmailPreview(null)}>
           <div className="flex min-h-screen items-center justify-center p-4">
             <div className="bg-card w-full max-w-2xl rounded-2xl border border-border shadow-2xl p-6 sm:p-8 relative animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            <button type="button" onClick={() => setEmailPreview(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
-              <X className="w-6 h-6" />
-            </button>
-
-            <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center gap-3">
-              <ShieldCheck className="w-8 h-8 text-emerald-500" />
-              Detalhes Técnicos do E-mail
-            </h3>
-
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4">
-                <div className="bg-muted/30 p-4 rounded-xl border border-border">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Destinatário (To):</span>
-                  <p className="text-sm font-mono text-foreground break-all">{emailPreview.to}</p>
-                </div>
-                <div className="bg-muted/30 p-4 rounded-xl border border-border">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Assunto (Subject):</span>
-                  <p className="text-sm font-mono text-foreground break-all">{emailPreview.subject}</p>
-                </div>
-              </div>
-
-              <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-emerald-600 uppercase">Magic Link Gerado (Clique para Copiar)</span>
-                </div>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(emailPreview.magicLink);
-                    alert("Link copiado para a área de transferência!");
-                  }}
-                  className="w-full text-left text-sm font-mono text-emerald-700 break-all bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition-all group flex items-start gap-3"
-                >
-                  <Copy className="w-5 h-5 mt-0.5 text-emerald-600 shrink-0 opacity-50 group-hover:opacity-100" />
-                  <span>{emailPreview.magicLink}</span>
-                </button>
-                <div className="flex gap-4 mt-3">
-                    <a href={emailPreview.magicLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 underline underline-offset-4">
-                        <ExternalLink className="w-3 h-3" /> Abrir no navegador
-                    </a>
-                </div>
-              </div>
-
-              <div className="bg-muted/30 p-4 rounded-xl border border-border">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Corpo do E-mail (Body Text):</span>
-                <div className="mt-2 text-sm font-mono text-foreground whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto bg-background/50 p-4 rounded-lg border border-border/50">
-                  {emailPreview.body}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 flex justify-end">
-              <button
-                onClick={() => setEmailPreview(null)}
-                className="px-8 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-all shadow-lg"
-              >
-                FECHAR VISUALIZAÇÃO
+              <button type="button" onClick={() => setEmailPreview(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-6 h-6" />
               </button>
+
+              <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center gap-3">
+                <ShieldCheck className="w-8 h-8 text-emerald-500" />
+                Detalhes Técnicos do E-mail
+              </h3>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="bg-muted/30 p-4 rounded-xl border border-border">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Destinatário (To):</span>
+                    <p className="text-sm font-mono text-foreground break-all">{emailPreview.to}</p>
+                  </div>
+                  <div className="bg-muted/30 p-4 rounded-xl border border-border">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Assunto (Subject):</span>
+                    <p className="text-sm font-mono text-foreground break-all">{emailPreview.subject}</p>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase">Magic Link Gerado (Clique para Copiar)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(emailPreview.magicLink);
+                      alert("Link copiado para a área de transferência!");
+                    }}
+                    className="w-full text-left text-sm font-mono text-emerald-700 break-all bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition-all group flex items-start gap-3"
+                  >
+                    <Copy className="w-5 h-5 mt-0.5 text-emerald-600 shrink-0 opacity-50 group-hover:opacity-100" />
+                    <span>{emailPreview.magicLink}</span>
+                  </button>
+                  <div className="flex gap-4 mt-3">
+                    <a href={emailPreview.magicLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 underline underline-offset-4">
+                      <ExternalLink className="w-3 h-3" /> Abrir no navegador
+                    </a>
+                  </div>
+                </div>
+
+                <div className="bg-muted/30 p-4 rounded-xl border border-border">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Corpo do E-mail (Body Text):</span>
+                  <div className="mt-2 text-sm font-mono text-foreground whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto bg-background/50 p-4 rounded-lg border border-border/50">
+                    {emailPreview.body}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-end">
+                <button
+                  onClick={() => setEmailPreview(null)}
+                  className="px-8 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-all shadow-lg"
+                >
+                  FECHAR VISUALIZAÇÃO
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
       )}
 
     </div>
