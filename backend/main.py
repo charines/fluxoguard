@@ -413,6 +413,59 @@ def login(payload: schemas.UnifiedLoginRequest, db: Session = Depends(get_db)):
         },
     }
 
+@app.post("/auth/magic-login", response_model=schemas.LoginResponse)
+def magic_login(payload: schemas.MagicLoginRequest, db: Session = Depends(get_db)):
+    """Realiza login automático via token de acesso seguro (Magic Link)."""
+    decrypted = decrypt_cryptojs_aes(payload.token, MAGIC_SECRET)
+    if not decrypted:
+        raise HTTPException(status_code=401, detail="Token de acesso inválido ou expirado")
+
+    try:
+        data = json.loads(decrypted)
+        email = data.get("email")
+        ext_exp = data.get("extExp")
+        
+        if not email:
+            raise HTTPException(status_code=401, detail="Email ausente no token")
+            
+        if ext_exp and datetime.now(timezone.utc).timestamp() * 1000 > ext_exp:
+            raise HTTPException(status_code=401, detail="Link de acesso expirado")
+
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuário não cadastrado para este acesso")
+            
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Sua conta está inativa")
+
+        # Gerar Sessão JWT Real
+        db_token = AuthToken(
+            user_id=user.id,
+            token=str(uuid4()),
+            expires_at=datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1),
+        )
+        db.add(db_token)
+        db.commit()
+        db.refresh(db_token)
+
+        return {
+            "access_token": db_token.token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "nome": user.nome,
+                "email": user.email,
+                "tipo": user.tipo,
+                "cnpj_cpf": user.cnpj_cpf,
+                "is_active": user.is_active
+            }
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Erro no magic_login: {e}")
+        raise HTTPException(status_code=401, detail="Falha ao processar acesso seguro")
+
 
 @app.get("/auth/me")
 def auth_me(current_user: User = Depends(get_current_user)):

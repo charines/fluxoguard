@@ -44,6 +44,9 @@ class UnifiedLoginRequest(BaseModel):
     identifier: str
     code: str
 
+class MagicLoginRequest(BaseModel):
+    token: str
+
 class AuthUserProfile(BaseModel):
     id: int
     nome: str

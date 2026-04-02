@@ -26,6 +26,7 @@ const SecureShare = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [transaction, setTransaction] = useState(null);
+  const [loggingIn, setLoggingIn] = useState(false);
   const token = searchParams.get('token');
 
   const decryptToken = (t) => {
@@ -119,9 +120,26 @@ const SecureShare = () => {
     );
   }
 
-  const handleGoToDashboard = () => {
-    // If the partner was "shadow logged" let them go to their transactions
-    navigate('/partner/transactions');
+  const handleGoToDashboard = async () => {
+    setLoggingIn(true);
+    try {
+      // Tentar login automático via link mágico
+      const response = await api.post('/auth/magic-login', { token });
+      const { access_token, user } = response.data;
+
+      // Salvar credenciais no localStorage para o dashboard reconhecer
+      localStorage.setItem('fluxoguard_admin_token', access_token);
+      localStorage.setItem('fluxoguard_admin_user', JSON.stringify(user));
+
+      // Navegar para a área protegida do parceiro
+      navigate('/partner/transactions');
+    } catch (err) {
+      console.error("Magic login failed:", err);
+      // Se falhar o login automático, vai para a tela de login normal
+      navigate('/');
+    } finally {
+        setLoggingIn(false);
+    }
   };
 
   const handleDownload = async (path) => {
@@ -247,10 +265,11 @@ const SecureShare = () => {
           
           <button 
             onClick={handleGoToDashboard}
-            className="w-full py-4 bg-primary text-white rounded-2xl font-black text-lg hover:shadow-[0_0_30px_rgba(255,107,0,0.4)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+            disabled={loggingIn}
+            className="w-full py-4 bg-primary text-white rounded-2xl font-black text-lg hover:shadow-[0_0_30px_rgba(255,107,0,0.4)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
           >
-            ACESSAR O SISTEMA
-            <ExternalLink className="w-5 h-5" />
+            {loggingIn ? 'AUTENTICANDO...' : 'ACESSAR O SISTEMA'}
+            {!loggingIn && <ExternalLink className="w-5 h-5" />}
           </button>
         </div>
 

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react'
 import CryptoJS from 'crypto-js'
 
 const MAGIC_SECRET = import.meta.env.VITE_MAGIC_LINK_SECRET || 'fluxoguard_secure_key_2026'
-import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail, ChevronLeft, ChevronRight, ExternalLink, ShieldCheck } from 'lucide-react'
+import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail, ChevronLeft, ChevronRight, ExternalLink, ShieldCheck, Copy } from 'lucide-react'
 import {
   changeTransactionStatus,
   downloadFile,
@@ -92,8 +92,10 @@ const RepasseList = () => {
       email: parceiroEmail,
       extExp: Date.now() + 24 * 60 * 60 * 1000 // 24h
     })
+    // Encrypt the payload and encode once
     const encrypted = CryptoJS.AES.encrypt(payload, MAGIC_SECRET).toString()
-    const magicLink = `https://fluxoguard-web.onrender.com/#/secure-share?token=${encodeURIComponent(encrypted)}`
+    const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
+    const magicLink = `${appUrl}/#/secure-share?token=${encodeURIComponent(encrypted)}`
 
     let bodyText = `${config.suggestion}\n\n`
     bodyText += `--- DETALHES DA TRANSAÇÃO ---\n`
@@ -105,13 +107,12 @@ const RepasseList = () => {
     bodyText += `Status Atual: ${status}\n\n`
     bodyText += `Acesse os detalhes e baixe os documentos com segurança aqui: ${magicLink}`
 
-    const body = encodeURIComponent(bodyText)
     return {
       to: parceiroEmail,
       subject: `[FluxoGuard] Atualização da Transação #${transacaoId}`,
       body: bodyText,
       magicLink: magicLink,
-      mailto: `mailto:${parceiroEmail}?subject=${subject}&body=${body}`
+      mailto: `mailto:${parceiroEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`
     }
   }
 
@@ -1167,13 +1168,25 @@ const RepasseList = () => {
               </div>
 
               <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase mb-1 block">Magic Link Gerado (URL):</span>
-                <p className="text-sm font-mono text-emerald-700 break-all bg-emerald-500/10 p-3 rounded mt-2 select-all border border-emerald-500/10 cursor-pointer hover:bg-emerald-500/20 transition-colors" title="Clique para selecionar tudo">
-                  {emailPreview.magicLink}
-                </p>
-                <a href={emailPreview.magicLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 mt-3 text-xs font-bold text-emerald-600 hover:text-emerald-700 underline">
-                  Abrir link em nova aba <ExternalLink className="w-3 h-3" />
-                </a>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase">Magic Link Gerado (Clique para Copiar)</span>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(emailPreview.magicLink);
+                    alert("Link copiado para a área de transferência!");
+                  }}
+                  className="w-full text-left text-sm font-mono text-emerald-700 break-all bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition-all group flex items-start gap-3"
+                >
+                  <Copy className="w-5 h-5 mt-0.5 text-emerald-600 shrink-0 opacity-50 group-hover:opacity-100" />
+                  <span>{emailPreview.magicLink}</span>
+                </button>
+                <div className="flex gap-4 mt-3">
+                    <a href={emailPreview.magicLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 underline underline-offset-4">
+                        <ExternalLink className="w-3 h-3" /> Abrir no navegador
+                    </a>
+                </div>
               </div>
 
               <div className="bg-muted/30 p-4 rounded-xl border border-border">
