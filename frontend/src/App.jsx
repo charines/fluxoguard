@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { HashRouter, Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { createRepasse, getUsers, getUsersByType, login, updateUser, updateUserActive } from './api'
-import { LayoutDashboard, LogIn, ShieldCheck, Users, ChevronDown, Shield, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, LogIn, ShieldCheck, Users, ChevronDown, Shield, BarChart3, Clock, AlertTriangle, CheckCircle, AlertCircle, Lock } from 'lucide-react'
 import AdminRegister from './AdminRegister'
 import RepasseList from './RepasseList'
 import LandingPage from './LandingPage'
@@ -37,7 +37,7 @@ const canEditTarget = (loggedUser, targetUser) => {
     return true
   }
   if (loggedUser.tipo === 'SUPERADMIN') {
-    return targetUser.tipo === 'ADMIN' || targetUser.tipo === 'PARCEIRO'
+    return true
   }
   if (loggedUser.tipo === 'ADMIN') {
     return targetUser.tipo === 'PARCEIRO'
@@ -127,18 +127,22 @@ const DashboardLayout = ({ title, children }) => {
 const UnifiedLogin = () => {
   const navigate = useNavigate()
   const [identifier, setIdentifier] = useState('')
-  const [code, setCode] = useState('')
+  const [c1, setC1] = useState('')
+  const [c2, setC2] = useState('')
+  const [c3, setC3] = useState('')
+  const [c4, setC4] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const handleLogin = async (event) => {
     event.preventDefault()
 
-    if (!identifier.trim() || !code.trim()) {
-      setError('Informe Email ou CNPJ e o código.')
+    if (!identifier.trim() || !c1 || !c2 || !c3 || !c4) {
+      setError('Por favor, preencha todos os campos do código.')
       return
     }
 
+    const code = `${c1}-${c2}${c3}${c4}`
     setLoading(true)
     setError(null)
 
@@ -191,14 +195,70 @@ const UnifiedLogin = () => {
           </div>
 
           <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5 block ml-1">Código de Acesso</label>
-            <input
-              type="password"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="123123"
-              className="w-full bg-background/50 border border-white/10 rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all placeholder:text-muted-foreground/30"
-            />
+            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3 block ml-1">Código de Acesso (abc-1a23)</label>
+            <div className="flex items-center gap-2">
+              <input
+                id="c1"
+                type="text"
+                maxLength={3}
+                placeholder="abc"
+                value={c1}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+                  setC1(val);
+                  if (val.length === 3) document.getElementById('c2').focus();
+                }}
+                className="w-full bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              />
+              <span className="text-muted-foreground font-bold">-</span>
+              <input
+                id="c2"
+                type="text"
+                maxLength={1}
+                placeholder="1"
+                value={c2}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setC2(val);
+                  if (val.length === 1) document.getElementById('c3').focus();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !c2) document.getElementById('c1').focus();
+                }}
+                className="w-16 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              />
+              <input
+                id="c3"
+                type="text"
+                maxLength={1}
+                placeholder="a"
+                value={c3}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+                  setC3(val);
+                  if (val.length === 1) document.getElementById('c4').focus();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !c3) document.getElementById('c2').focus();
+                }}
+                className="w-16 bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              />
+              <input
+                id="c4"
+                type="text"
+                maxLength={2}
+                placeholder="23"
+                value={c4}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setC4(val);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !c4) document.getElementById('c3').focus();
+                }}
+                className="w-full bg-background/50 border border-white/10 rounded-xl px-2 py-3 text-center text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              />
+            </div>
           </div>
         </div>
 
@@ -231,10 +291,15 @@ const LoginWithHealthCheck = () => {
 }
 
 const AdminDashboard = () => {
+  const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [stats, setStats] = useState({ total: 0, aguardando: 0, aprovacao: 0, divergencia: 0, pago: 0, finalizado: 0 })
   const navigate = useNavigate()
   const [users, setUsers] = useState([])
-  const [dashboardOpen, setDashboardOpen] = useState(false)
   const loggedUser = getLoggedUser()
+
+  const formatCurrency = (value) => {
+    return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  }
 
   const loadUsers = async () => {
     try {
@@ -266,41 +331,102 @@ const AdminDashboard = () => {
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${dashboardOpen ? 'rotate-180' : ''}`} />
         </button>
 
-        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${dashboardOpen ? 'max-h-96 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${dashboardOpen ? 'max-h-[1500px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="text-gray-500 text-sm font-medium">Usuários Totais</h3>
-              <p className="text-3xl font-bold text-slate-900">{users.length}</p>
+              <h3 className="text-gray-500 text-sm font-medium uppercase tracking-wider">Acesso e Perfil</h3>
+              <div className="mt-2">
+                <span className="text-sm font-medium text-muted-foreground block">Usuário Logado:</span>
+                <span className="text-lg font-bold text-slate-800">{loggedUser?.nome || 'Usuário'}</span>
+                <div className="mt-1">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${loggedUser?.tipo === 'SUPERADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {loggedUser?.tipo || '--'}
+                    </span>
+                </div>
+              </div>
             </div>
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="text-gray-500 text-sm font-medium">Perfil Atual</h3>
-              <p className="text-2xl font-bold text-orange-500">{loggedUser?.tipo || '--'}</p>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="text-gray-500 text-sm font-medium">Ações</h3>
-              <div className="text-sm mt-2 space-y-2">
+              <h3 className="text-gray-500 text-sm font-medium uppercase tracking-wider">Atalhos Administrativos</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
                 {loggedUser?.tipo === 'SUPERADMIN' && (
-                  <div>
-                    <Link className="text-blue-700 hover:underline" to="/admin/manage?scope=admins">Gerenciar Admins</Link>
-                  </div>
+                  <Link className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all text-center" to="/admin/manage?scope=admins">Configurações de Admins</Link>
                 )}
                 {(loggedUser?.tipo === 'ADMIN' || loggedUser?.tipo === 'SUPERADMIN') && (
-                  <div>
-                    <Link className="text-blue-700 hover:underline" to="/admin/users">Usuários Cadastrados</Link>
-                  </div>
+                  <Link className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all text-center" to="/admin/users">Base de Usuários</Link>
                 )}
                 {(loggedUser?.tipo === 'ADMIN' || loggedUser?.tipo === 'SUPERADMIN') && (
-                  <div>
-                    <Link className="text-blue-700 hover:underline" to="/admin/manage?scope=partners">Gerenciar Parceiros</Link>
-                  </div>
+                  <Link className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all text-center" to="/admin/manage?scope=partners">Gerenciar Parceiros</Link>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Transaction Summary dashboard cards inside the toggle */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-6">
+            <div className="bg-white p-6 rounded-2xl border border-border shadow-sm flex items-center gap-5">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                <span className="text-xl font-black">R$</span>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Liberado</p>
+                <h4 className="text-xl font-black text-foreground">{formatCurrency(stats.total)}</h4>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-border shadow-sm flex items-center gap-5">
+              <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-500">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Aguardando NF</p>
+                <h4 className="text-xl font-black text-foreground">{stats.aguardando}</h4>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-border shadow-sm flex items-center gap-5">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Em Aprovação</p>
+                <h4 className="text-xl font-black text-foreground">{stats.aprovacao}</h4>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-border shadow-sm flex items-center gap-5">
+              <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-600">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Divergências</p>
+                <h4 className="text-xl font-black text-foreground">{stats.divergencia}</h4>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-border shadow-sm flex items-center gap-5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                <CheckCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pagos / Liberados</p>
+                <h4 className="text-xl font-black text-foreground">{stats.pago}</h4>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-border shadow-sm flex items-center gap-5">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-700">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Finalizados</p>
+                <h4 className="text-xl font-black text-foreground">{stats.finalizado}</h4>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <RepasseList />
+      <RepasseList onStatsChange={setStats} />
     </DashboardLayout>
   )
 }
@@ -508,6 +634,11 @@ const EditUserPage = () => {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [password, setPassword] = useState('')
+  const [pass1, setPass1] = useState('')
+  const [pass2, setPass2] = useState('')
+  const [pass3, setPass3] = useState('')
+  const [pass4, setPass4] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -556,12 +687,17 @@ const EditUserPage = () => {
       return
     }
 
+    const finalPassword = (pass1.length === 3 && pass2.length === 1 && pass3.length === 1 && pass4.length === 2) 
+      ? `${pass1}-${pass2}${pass3}${pass4}` 
+      : undefined;
+
     setSaving(true)
     try {
       const updated = await updateUser(targetUser.id, {
         nome: nome.trim(),
         email: email.trim(),
         telefone: telefone.trim(),
+        password: finalPassword
       })
 
       if (loggedUser && loggedUser.id === updated.id) {
@@ -616,6 +752,75 @@ const EditUserPage = () => {
               onChange={(e) => setTelefone(e.target.value)}
               className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
             />
+
+            <label className="block text-sm text-gray-700 mb-1 font-bold">Nova Senha (Opcional)</label>
+            <div className="flex items-center gap-2 mb-6">
+              <input
+                id="p1"
+                type="text"
+                maxLength={3}
+                placeholder="abc"
+                value={pass1}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+                  setPass1(val);
+                  if (val.length === 3) document.getElementById('p2').focus();
+                }}
+                className="w-16 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+              />
+              <span className="text-muted-foreground font-bold">-</span>
+              <input
+                id="p2"
+                type="text"
+                maxLength={1}
+                placeholder="1"
+                value={pass2}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setPass2(val);
+                  if (val.length === 1) document.getElementById('p3').focus();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !pass2) document.getElementById('p1').focus();
+                }}
+                className="w-12 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+              />
+              <input
+                id="p3"
+                type="text"
+                maxLength={1}
+                placeholder="a"
+                value={pass3}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+                  setPass3(val);
+                  if (val.length === 1) document.getElementById('p4').focus();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !pass3) document.getElementById('p2').focus();
+                }}
+                className="w-12 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+              />
+              <input
+                id="p4"
+                type="text"
+                maxLength={2}
+                placeholder="23"
+                value={pass4}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setPass4(val);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !pass4) document.getElementById('p3').focus();
+                }}
+                className="w-16 border-2 border-primary/20 rounded px-2 py-2 text-center focus:border-primary outline-none transition-all font-mono"
+              />
+            </div>
+            
+            <p className="text-[10px] text-muted-foreground -mt-4 mb-4">
+              Padrão: 3 letras - 1 número + 1 letra + 2 números
+            </p>
 
             <div className="text-xs text-gray-500 mb-5">
               CPF/CNPJ e Tipo não podem ser alterados nesta tela.

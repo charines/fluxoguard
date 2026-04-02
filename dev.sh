@@ -12,6 +12,11 @@ ROOT_DIR=$(pwd)
 echo "🧹 Limpando processos antigos nas portas 8000 e 5175..."
 fuser -k 8000/tcp 5175/tcp 2>/dev/null
 
+# Carregar Variaveis do .env (se existir) para o shell atual
+if [ -f "$ROOT_DIR/frontend/.env" ]; then
+    export $(grep -v '^#' "$ROOT_DIR/frontend/.env" | xargs)
+fi
+
 # 2. Iniciar o Backend no VENV do FluxoGuard
 echo "🐍 [BACKEND] Iniciando FastAPI na porta 8000..."
 cd "$ROOT_DIR/backend"
