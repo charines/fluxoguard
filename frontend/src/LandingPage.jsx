@@ -3,12 +3,6 @@ import { Shield, BarChart3, ChevronRight, CheckCircle2, PieChart, ArrowLeftRight
 import { Link } from 'react-router-dom';
 
 const LandingPage = () => {
-  const WHATSAPP_NUMBER = '5511937054645';
-  const TEST_HASHTAG = '#AtivarTesteFluxo';
-  const BUY_HASHTAG = '#QueroComprarFluxo';
-
-  const waLink = (text) => `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
-
   return (
     <div className="dark-theme min-h-screen bg-background text-foreground font-inter overflow-x-hidden selection:bg-primary/30">
       {/* Header */}
@@ -56,16 +50,14 @@ const LandingPage = () => {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-4 pt-4 justify-center lg:justify-start">
-              <a 
-                href={waLink(TEST_HASHTAG)}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Link 
+                to="/login"
                 className="group relative px-8 py-4 bg-primary text-white rounded-xl font-bold text-lg hover:shadow-[0_0_30px_rgba(255,107,0,0.4)] transition-all duration-300 transform hover:-translate-y-1 flex items-center gap-2"
               >
-                COMEÇAR TESTE GRÁTIS
+                ENTRAR NA FERRAMENTA
                 <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </a>
-              <span className="text-xs text-muted-foreground font-medium italic">#AtivarTesteFluxo • Sem cartão de crédito</span>
+              </Link>
+              <span className="text-xs text-muted-foreground font-medium italic">Acesso seguro e imediato • Controle total</span>
             </div>
           </div>
 
@@ -216,22 +208,20 @@ const LandingPage = () => {
           </h2>
           
           <p className="text-xl text-muted-foreground max-w-xl mx-auto">
-            Fale com um consultor agora mesmo e descubra como o FluxoGuard pode transformar o controle financeiro da sua empresa.
+            Acesse a ferramenta agora mesmo e descubra como o FluxoGuard pode transformar o controle financeiro da sua empresa.
           </p>
 
           <div className="flex flex-col items-center gap-6">
-            <a 
-              href={waLink(BUY_HASHTAG)}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link 
+              to="/login"
               className="group w-full sm:w-auto px-10 py-5 bg-primary text-white rounded-2xl font-bold text-xl hover:shadow-[0_0_40px_rgba(255,107,0,0.5)] transition-all duration-300 transform hover:-translate-y-1 flex items-center justify-center gap-3"
             >
-              <MessageCircle className="w-6 h-6" />
-              FALAR COM CONSULTOR
-            </a>
+              <Rocket className="w-6 h-6" />
+              ENTRAR NA FERRAMENTA
+            </Link>
             <div className="flex flex-col items-center gap-2">
-              <span className="text-sm font-bold text-primary">#QueroComprarFluxo</span>
-              <span className="text-xs text-muted-foreground">Resposta em até 2 minutos</span>
+              <span className="text-sm font-bold text-primary">Acesse o FluxoGuard agora</span>
+              <span className="text-xs text-muted-foreground">Sistema de monitoramento em tempo real</span>
             </div>
           </div>
 

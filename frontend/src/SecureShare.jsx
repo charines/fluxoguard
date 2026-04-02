@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import CryptoJS from 'crypto-js';
-import { Shield, BarChart3, Download, ExternalLink, AlertCircle, Clock, CheckCircle, FileText, ImageIcon } from 'lucide-react';
+import { Shield, BarChart3, Download, ExternalLink, AlertCircle, Clock, CheckCircle, FileText, ImageIcon, UploadCloud, FileUp } from 'lucide-react';
 import api, { API_BASE_URL, buildDownloadPath } from './api';
 import { useApiHealth } from './ApiHealthContext';
 import HealthScreen from './HealthScreen';
@@ -28,6 +28,7 @@ const SecureShare = () => {
   const [transaction, setTransaction] = useState(null);
   const [loggingIn, setLoggingIn] = useState(false);
   const token = searchParams.get('token');
+  const fileInputRef = useRef(null);
 
   const decryptToken = (t) => {
     try {
@@ -143,8 +144,53 @@ const SecureShare = () => {
   };
 
   const handleDownload = async (path) => {
-    const fullUrl = `${API_BASE_URL}${buildDownloadPath(path)}`;
-    window.open(fullUrl, '_blank');
+    // Agora enviamos o X-Magic-Token para o download tbm caso o backend valide
+    try {
+      const response = await api.get(buildDownloadPath(path), {
+        headers: { 'X-Magic-Token': token },
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(response.data);
+      const fileName = String(path || 'arquivo').split('/').pop() || 'arquivo';
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Falha ao baixar arquivo. Tente entrar no sistema.");
+    }
+  };
+
+  const handleUploadNF = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    if (files.some(f => !f.name.toLowerCase().endsWith('.pdf'))) {
+      alert('Apenas arquivos PDF são aceitos para Nota Fiscal.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      files.forEach(f => formData.append('notas_fiscais', f));
+
+      const response = await api.patch(`/transactions/${transaction.id}/upload-nf`, formData, {
+        headers: { 
+          'X-Magic-Token': token,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      setTransaction(response.data);
+      alert('Nota fiscal enviada com sucesso! O status foi atualizado.');
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Erro ao enviar nota fiscal.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -223,31 +269,67 @@ const SecureShare = () => {
               )}
             </div>
 
-            {/* Document Indicators (View Only) */}
-            <div className="pt-8 space-y-3">
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-center mb-1">Documentação Disponível</p>
+            {/* Document Indicators & Actions */}
+            <div className="pt-8 space-y-4">
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-center mb-1">
+                {transaction?.status === 'AGUARDANDO_NF' ? 'Ações Necessárias' : 'Documentação Disponível'}
+              </p>
               
-              <div className="grid grid-cols-2 gap-4">
-                {transaction?.notas_fiscais?.length > 0 && (
-                  <div 
-                    className="flex flex-col items-center gap-2 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl opacity-80 cursor-default"
-                  >
-                    <FileText className="w-6 h-6 text-blue-500 transition-transform" />
-                    <span className="text-[10px] font-bold text-blue-500 uppercase">Nota Fiscal</span>
-                  </div>
-                )}
-                
-                {transaction?.comprovantes?.length > 0 && (
-                  <div 
-                    className="flex flex-col items-center gap-2 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl opacity-80 cursor-default"
-                  >
-                    <ImageIcon className="w-6 h-6 text-emerald-500 transition-transform" />
-                    <span className="text-[10px] font-bold text-emerald-500 uppercase">Comprovante</span>
+              <div className="grid grid-cols-1 gap-4">
+                {/* Upload NF Button for AGUARDANDO_NF */}
+                {transaction?.status === 'AGUARDANDO_NF' && (
+                  <div className="relative">
+                    <input 
+                      type="file" 
+                      ref={fileInputRef}
+                      onChange={handleUploadNF}
+                      multiple
+                      accept=".pdf"
+                      className="hidden"
+                    />
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full flex items-center justify-between p-5 bg-primary/10 border-2 border-dashed border-primary/30 rounded-2xl hover:bg-primary/20 hover:border-primary/50 transition-all group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-primary rounded-xl text-white shadow-lg shadow-primary/20">
+                          <UploadCloud className="w-6 h-6" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-bold text-white uppercase tracking-tight">Subir Nota Fiscal</p>
+                          <p className="text-[10px] text-primary font-medium tracking-wide">Necessário para prosseguir</p>
+                        </div>
+                      </div>
+                      <FileUp className="w-5 h-5 text-primary opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                    </button>
                   </div>
                 )}
 
-                {(!transaction?.notas_fiscais?.length && !transaction?.comprovantes?.length) && (
-                  <div className="col-span-2 py-6 text-center text-muted-foreground text-sm border-2 border-dashed border-white/5 rounded-2xl">
+                {/* Download Buttons for PAGO or others with files */}
+                <div className="grid grid-cols-2 gap-4">
+                  {(transaction?.notas_fiscais?.length > 0) && (
+                    <button 
+                      onClick={() => handleDownload(transaction.notas_fiscais[0])}
+                      className="flex flex-col items-center gap-2 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl hover:bg-blue-500/20 transition-all group active:scale-95"
+                    >
+                      <FileText className="w-6 h-6 text-blue-500 group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-bold text-blue-500 uppercase">Baixar NF ({transaction.notas_fiscais.length})</span>
+                    </button>
+                  )}
+                  
+                  {(transaction?.comprovantes?.length > 0) && (
+                    <button 
+                      onClick={() => handleDownload(transaction.comprovantes[0])}
+                      className="flex flex-col items-center gap-2 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl hover:bg-emerald-500/20 transition-all group active:scale-95"
+                    >
+                      <ImageIcon className="w-6 h-6 text-emerald-500 group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-bold text-emerald-500 uppercase">Baixar Comprovante ({transaction.comprovantes.length})</span>
+                    </button>
+                  )}
+                </div>
+
+                {(!transaction?.notas_fiscais?.length && !transaction?.comprovantes?.length && transaction?.status !== 'AGUARDANDO_NF') && (
+                  <div className="py-6 text-center text-muted-foreground text-sm border-2 border-dashed border-white/5 rounded-2xl">
                     Aguardando emissão de documentos.
                   </div>
                 )}
