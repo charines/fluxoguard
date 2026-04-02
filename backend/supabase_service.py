@@ -23,15 +23,15 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def validate_file(file: UploadFile):
     """
-    Validate if file is PDF or Image and max 100 KB.
+    Validate if file is PDF or Image and max 500 KB.
     """
-    # Max size 100 KB
-    MAX_SIZE = 100 * 1024 
+    # Max size 500 KB
+    MAX_SIZE = 500 * 1024 
     
     # Read file content to check size (fast for 100KB)
     content = file.file.read()
     if len(content) > MAX_SIZE:
-        raise HTTPException(status_code=400, detail="Arquivo muito grande. Máximo 100 KB.")
+        raise HTTPException(status_code=400, detail="Arquivo muito grande. Máximo 500 KB.")
     
     # Reset file pointer
     file.file.seek(0)

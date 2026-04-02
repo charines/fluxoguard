@@ -89,6 +89,33 @@ O FluxoGuard foi desenhado para atender diferentes perfis de forma otimizada:
 
 ---
 
+## 🧪 Testes
+
+O FluxoGuard possui uma suíte de testes automatizados para garantir a estabilidade das funcionalidades de backend e frontend.
+
+### **Central de Testes (Recomendado)**
+Na raiz do projeto, você pode usar o script interativo para rodar os testes de forma simples:
+```bash
+./test.sh
+```
+O script oferecerá as opções:
+1. **Backend**: Executa o Pytest (FastAPI).
+2. **Frontend**: Executa o Vitest (React).
+3. **Ambos**: Executa a suíte completa.
+
+### **Execução Manual**
+
+#### **Backend (Pytest)**
+1. Entre na pasta `backend`.
+2. Execute: `python -m pytest test_main.py`
+*(Nota: Os testes utilizam SQLite em memória para não afetar o banco de dados principal).*
+
+#### **Frontend (Vitest)**
+1. Entre na pasta `frontend`.
+2. Execute: `npm test`
+
+---
+
 ## 🔐 Segurança
 *   **Autenticação:** Baseada em UUIDv4 e expiração controlada.
 *   **Criptografia:** `AES-256-CBC` para links compartilháveis.
