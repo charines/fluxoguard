@@ -42,7 +42,7 @@ const formatDate = (tx) => {
 
 const canUploadNF = (tx) => ['LIBERADO', 'AGUARDANDO_NF', 'DIVERGENCIA', 'AGUARDANDO_APROVACAO'].includes(tx.status)
 
-const RepasseList = () => {
+const RepasseList = ({ onStatsChange }) => {
   const loggedUser = readLoggedUser()
   const isAdmin = loggedUser?.tipo === 'ADMIN' || loggedUser?.tipo === 'SUPERADMIN'
   const isPartner = loggedUser?.tipo === 'PARCEIRO'
@@ -76,8 +76,25 @@ const RepasseList = () => {
   const [statusMenuOpen, setStatusMenuOpen] = useState(null) // tx.id or null
   const [notifyModal, setNotifyModal] = useState(null) // tx or null
   const [emailPreview, setEmailPreview] = useState(null) // { to, subject, body, magicLink } or null
-  const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const stats = useMemo(() => {
+    const s = { total: 0, aguardando: 0, aprovacao: 0, divergencia: 0, pago: 0, finalizado: 0 }
+    rows.forEach(tx => {
+      s.total += Number(tx.valor_liberado || 0)
+      if (tx.status === 'AGUARDANDO_NF') s.aguardando++
+      else if (tx.status === 'AGUARDANDO_APROVACAO' || tx.status === 'CONFERENCIA') s.aprovacao++
+      else if (tx.status === 'DIVERGENCIA') s.divergencia++
+      else if (tx.status === 'PAGO' || tx.status === 'LIBERADO') s.pago++
+      else if (tx.status === 'FINALIZADO') s.finalizado++
+    })
+    return s
+  }, [rows])
+
+  useEffect(() => {
+    if (onStatsChange) onStatsChange(stats)
+  }, [stats, onStatsChange])
 
   const generateMailtoLink = (parceiroEmail, status, transacaoId, tx) => {
     const config = NOTIFY_CONFIG[status] || NOTIFY_CONFIG['DEFAULT']
