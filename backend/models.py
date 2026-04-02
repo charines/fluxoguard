@@ -11,6 +11,7 @@ class User(Base):
     telefone = Column(String(30), nullable=True)
     tipo = Column(Enum("SUPERADMIN", "ADMIN", "PARCEIRO", name="user_type"), default="PARCEIRO")
     cnpj_cpf = Column(String(20), unique=True, nullable=False)
+    password = Column(String(50), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     
     # Relationships

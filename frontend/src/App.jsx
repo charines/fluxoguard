@@ -37,7 +37,7 @@ const canEditTarget = (loggedUser, targetUser) => {
     return true
   }
   if (loggedUser.tipo === 'SUPERADMIN') {
-    return targetUser.tipo === 'ADMIN' || targetUser.tipo === 'PARCEIRO'
+    return true
   }
   if (loggedUser.tipo === 'ADMIN') {
     return targetUser.tipo === 'PARCEIRO'
@@ -195,7 +195,33 @@ const UnifiedLogin = () => {
             <input
               type="password"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => {
+                let val = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (val.length > 7) val = val.substring(0, 7);
+                
+                let formatted = '';
+                const letters_0_3 = val.substring(0, 3).replace(/[^a-z]/g, '');
+                formatted += letters_0_3;
+                
+                if (val.length > 3) {
+                  formatted += '-';
+                  const digit_4 = val.charAt(3).replace(/\D/g, '');
+                  formatted += digit_4;
+                  
+                  if (val.length > 4) {
+                    const letter_5 = val.charAt(4).replace(/[^a-z]/g, '');
+                    formatted += letter_5;
+                    
+                    if (val.length > 5) {
+                      const digits_6_7 = val.substring(5, 7).replace(/\D/g, '');
+                      formatted += digits_6_7;
+                    }
+                  }
+                }
+                
+                if (formatted.endsWith('-') && val.length <= 3) formatted = formatted.slice(0, -1);
+                setCode(formatted);
+              }}
               placeholder="123123"
               className="w-full bg-background/50 border border-white/10 rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all placeholder:text-muted-foreground/30"
             />
@@ -508,6 +534,7 @@ const EditUserPage = () => {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -562,6 +589,7 @@ const EditUserPage = () => {
         nome: nome.trim(),
         email: email.trim(),
         telefone: telefone.trim(),
+        password: password.trim() || undefined
       })
 
       if (loggedUser && loggedUser.id === updated.id) {
@@ -615,6 +643,49 @@ const EditUserPage = () => {
               value={telefone}
               onChange={(e) => setTelefone(e.target.value)}
               className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
+            />
+
+            <label className="block text-sm text-gray-700 mb-1 font-bold">Nova Senha (Opcional)</label>
+            <input
+              type="text"
+              value={password}
+              onChange={(e) => {
+                let val = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (val.length > 7) val = val.substring(0, 7);
+                
+                let formatted = '';
+                // 3 letras (abc)
+                const letters_0_3 = val.substring(0, 3).replace(/[^a-z]/g, '');
+                formatted += letters_0_3;
+                
+                if (val.length > 3) {
+                  formatted += '-';
+                  // 1 numero (1)
+                  const digit_4 = val.charAt(3).replace(/\D/g, '');
+                  formatted += digit_4;
+                  
+                  if (val.length > 4) {
+                    // 1 letra (a)
+                    const letter_5 = val.charAt(4).replace(/[^a-z]/g, '');
+                    formatted += letter_5;
+                    
+                    if (val.length > 5) {
+                      // 2 numeros (23)
+                      const digits_6_7 = val.substring(5, 7).replace(/\D/g, '');
+                      formatted += digits_6_7;
+                    }
+                  }
+                }
+                
+                // Limpeza final para remover hifens órfãos
+                if (formatted.endsWith('-') && val.length <= 3) {
+                   formatted = formatted.slice(0, -1);
+                }
+
+                setPassword(formatted);
+              }}
+              placeholder="Deixe em branco para não alterar"
+              className="w-full border-2 border-primary/20 rounded px-3 py-2 mb-4 focus:border-primary outline-none transition-all"
             />
 
             <div className="text-xs text-gray-500 mb-5">

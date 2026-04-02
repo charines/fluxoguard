@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react'
 import CryptoJS from 'crypto-js'
 
 const MAGIC_SECRET = import.meta.env.VITE_MAGIC_LINK_SECRET || 'fluxoguard_secure_key_2026'
-import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Calendar, Plus, X, UploadCloud, CheckCircle, AlertTriangle, Clock, AlertCircle, Lock, Image as ImageIcon, FileText, Download, Trash2, MoreHorizontal, Check, Bell, Mail, ChevronLeft, ChevronRight, ExternalLink, ShieldCheck } from 'lucide-react'
 import {
   changeTransactionStatus,
   downloadFile,
@@ -75,6 +75,7 @@ const RepasseList = () => {
   const [processingBatch, setProcessingBatch] = useState(false)
   const [statusMenuOpen, setStatusMenuOpen] = useState(null) // tx.id or null
   const [notifyModal, setNotifyModal] = useState(null) // tx or null
+  const [emailPreview, setEmailPreview] = useState(null) // { to, subject, body, magicLink } or null
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
 
@@ -105,7 +106,13 @@ const RepasseList = () => {
     bodyText += `Acesse os detalhes e baixe os documentos com segurança aqui: ${magicLink}`
 
     const body = encodeURIComponent(bodyText)
-    return `mailto:${parceiroEmail}?subject=${subject}&body=${body}`
+    return {
+      to: parceiroEmail,
+      subject: `[FluxoGuard] Atualização da Transação #${transacaoId}`,
+      body: bodyText,
+      magicLink: magicLink,
+      mailto: `mailto:${parceiroEmail}?subject=${subject}&body=${body}`
+    }
   }
 
   const NOTIFY_CONFIG = {
@@ -1102,7 +1109,7 @@ const RepasseList = () => {
                 </div>
 
                 <a
-                  href={generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal)}
+                  href={generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal).mailto}
                   onClick={() => setNotifyModal(null)}
                   className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl text-white font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-lg ${
                     config.color === 'emerald' ? 'bg-emerald-600 shadow-emerald-500/20' : 
@@ -1114,6 +1121,16 @@ const RepasseList = () => {
                 >
                   <Mail className="w-5 h-5" /> {config.buttonText}
                 </a>
+
+                <button
+                  onClick={() => {
+                    const data = generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal);
+                    setEmailPreview(data);
+                  }}
+                  className="mt-3 w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-border bg-background text-foreground hover:bg-muted font-bold text-sm transition-all"
+                >
+                  <Search className="w-4 h-4" /> Visualizar Detalhes Técnicos (Link)
+                </button>
                 
                 <p className="mt-4 text-[10px] text-muted-foreground">
                   O link abrirá seu cliente de e-mail padrão.
@@ -1123,6 +1140,61 @@ const RepasseList = () => {
           </div>
         )
       })()}
+
+      {/* Email Preview Modal (Technical) */}
+      {emailPreview && (
+        <div className="fixed inset-0 bg-background/90 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setEmailPreview(null)}>
+          <div className="bg-card w-full max-w-2xl rounded-2xl border border-border shadow-2xl p-8 relative overflow-hidden" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => setEmailPreview(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-6 h-6" />
+            </button>
+
+            <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center gap-3">
+              <ShieldCheck className="w-8 h-8 text-emerald-500" />
+              Detalhes Técnicos do E-mail
+            </h3>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="bg-muted/30 p-4 rounded-xl border border-border">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Destinatário (To):</span>
+                  <p className="text-sm font-mono text-foreground break-all">{emailPreview.to}</p>
+                </div>
+                <div className="bg-muted/30 p-4 rounded-xl border border-border">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Assunto (Subject):</span>
+                  <p className="text-sm font-mono text-foreground break-all">{emailPreview.subject}</p>
+                </div>
+              </div>
+
+              <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase mb-1 block">Magic Link Gerado (URL):</span>
+                <p className="text-sm font-mono text-emerald-700 break-all bg-emerald-500/10 p-3 rounded mt-2 select-all border border-emerald-500/10 cursor-pointer hover:bg-emerald-500/20 transition-colors" title="Clique para selecionar tudo">
+                  {emailPreview.magicLink}
+                </p>
+                <a href={emailPreview.magicLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 mt-3 text-xs font-bold text-emerald-600 hover:text-emerald-700 underline">
+                  Abrir link em nova aba <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+
+              <div className="bg-muted/30 p-4 rounded-xl border border-border">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Corpo do E-mail (Body Text):</span>
+                <div className="mt-2 text-sm font-mono text-foreground whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto bg-background/50 p-4 rounded-lg border border-border/50">
+                  {emailPreview.body}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={() => setEmailPreview(null)}
+                className="px-8 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-all shadow-lg"
+              >
+                FECHAR VISUALIZAÇÃO
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

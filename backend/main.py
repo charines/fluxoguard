@@ -19,6 +19,8 @@ import schemas
 import hashlib
 from Crypto.Cipher import AES
 from base64 import b64decode
+import string
+import random
 
 from contextlib import asynccontextmanager
 
@@ -58,6 +60,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def generate_dynamic_password() -> str:
+    """Gera senha de 8 caracteres no formato: abc-1a23 (Padrão sugerido)."""
+    letters = string.ascii_lowercase
+    digits = string.digits
+
+    p1 = "".join(random.choices(letters, k=3))
+    p2 = random.choice(digits)
+    p3 = random.choice(letters)
+    p4 = "".join(random.choices(digits, k=2))
+    return f"{p1}-{p2}{p3}{p4}"
 
 
 @app.get("/")
@@ -232,7 +246,7 @@ def can_edit_user(actor: User, target: User) -> bool:
     if actor.id == target.id and actor.tipo in ["ADMIN", "SUPERADMIN"]:
         return True
     if actor.tipo == "SUPERADMIN":
-        return target.tipo in ["ADMIN", "PARCEIRO"]
+        return True # Superadmin pode editar todos
     if actor.tipo == "ADMIN":
         return target.tipo == "PARCEIRO"
     return False
@@ -368,10 +382,11 @@ def find_user_for_login(identifier: str, db: Session) -> User:
 
 @app.post("/auth/login", response_model=schemas.LoginResponse)
 def login(payload: schemas.UnifiedLoginRequest, db: Session = Depends(get_db)):
-    if payload.code != "123123":
-        raise HTTPException(status_code=401, detail="Código inválido")
-
     user = find_user_for_login(payload.identifier.strip(), db)
+
+    # Verifica se a senha enviada coincide com a armazenada
+    if payload.code != user.password:
+        raise HTTPException(status_code=401, detail="Código inválido")
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Acesso negado. Usuário inativo.")
@@ -435,6 +450,7 @@ def create_user(
         telefone=user.telefone,
         tipo=user.tipo,
         cnpj_cpf=user.cnpj_cpf,
+        password=generate_dynamic_password(),
         is_active=user.is_active,
     )
     db.add(new_user)
@@ -466,6 +482,7 @@ def register_admin(
         telefone=payload.telefone,
         tipo=payload.tipo,
         cnpj_cpf=payload.documento_cnpj_cpf,
+        password=generate_dynamic_password(),
         is_active=True,
     )
     db.add(new_user)
@@ -524,6 +541,9 @@ def update_user(
 
     if payload.telefone is not None:
         target_user.telefone = payload.telefone
+
+    if payload.password is not None and payload.password.strip() != "":
+        target_user.password = payload.password.strip()
 
     db.commit()
     db.refresh(target_user)

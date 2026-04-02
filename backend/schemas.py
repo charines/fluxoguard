@@ -65,9 +65,11 @@ class UserUpdateRequest(BaseModel):
     email: Optional[EmailStr] = None
     telefone: Optional[str] = None
     cnpj_cpf: Optional[str] = None
+    password: Optional[str] = None
 
 class UserResponse(UserBase):
     id: int
+    password: Optional[str] = None
 
     class Config:
         from_attributes = True
