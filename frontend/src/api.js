@@ -35,7 +35,9 @@ export const getUsersByType = async (tipo) => {
 };
 
 export const createTransaction = async (data) => {
-  const response = await api.post('/transactions', data);
+  const response = await api.post('/transactions', data, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 };
 
@@ -57,6 +59,21 @@ export const registerAdmin = async (payload) => {
 
 export const login = async ({ identifier, code }) => {
   const response = await api.post('/auth/login', { identifier, code });
+  return response.data;
+};
+
+export const checkAvailability = async (params) => {
+  const response = await api.get('/users/check-availability', {
+    params,
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
+export const registerUser = async (payload) => {
+  const response = await api.post('/users/register', payload, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 };
 
@@ -108,8 +125,9 @@ export const getMyTransactions = async () => {
   return response.data;
 };
 
-export const uploadNotasFiscais = async (transactionId, files) => {
+export const uploadNotasFiscais = async (transactionId, files, notaNumero) => {
   const formData = new FormData();
+  formData.append('nota_numero', notaNumero);
   files.forEach((file) => formData.append('notas_fiscais', file));
 
   const response = await api.patch(`/transactions/${transactionId}/upload-nf`, formData, {
@@ -177,5 +195,21 @@ export const checkHealth = async () => {
   const response = await api.get('/health');
   return response.data;
 };
+
+// Email Templates & Previews
+export const getEmailPreview = (transactionId, status) => 
+  api.get(`/transactions/${transactionId}/email-preview?status=${status}`, {
+    headers: getAuthHeaders(),
+  }).then(r => r.data)
+
+export const createEmailTemplate = (payload) =>
+  api.post('/email-templates', payload, {
+    headers: getAuthHeaders(),
+  }).then(r => r.data)
+
+export const getEmailTemplates = () =>
+  api.get('/email-templates', {
+    headers: getAuthHeaders(),
+  }).then(r => r.data)
 
 export default api;

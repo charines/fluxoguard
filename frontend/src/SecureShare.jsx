@@ -18,6 +18,13 @@ const formatDate = (tx) => {
   return `${String(tx.dia).padStart(2, '0')}/${String(tx.mes).padStart(2, '0')}/${tx.ano}`;
 };
 
+const formatItemDate = (value) => {
+  if (!value) return '-';
+  const parts = String(value).split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return value;
+};
+
 const SecureShare = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -27,6 +34,7 @@ const SecureShare = () => {
   const [error, setError] = useState(null);
   const [transaction, setTransaction] = useState(null);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [notaNumero, setNotaNumero] = useState('');
   const token = searchParams.get('token');
   const fileInputRef = useRef(null);
 
@@ -167,6 +175,13 @@ const SecureShare = () => {
   const handleUploadNF = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
+    const numero = (notaNumero || '').trim();
+
+    if (!numero) {
+      alert('Informe o número da nota fiscal antes de enviar.');
+      e.target.value = '';
+      return;
+    }
 
     if (files.some(f => !f.name.toLowerCase().endsWith('.pdf'))) {
       alert('Apenas arquivos PDF são aceitos para Nota Fiscal.');
@@ -176,6 +191,7 @@ const SecureShare = () => {
     setLoading(true);
     try {
       const formData = new FormData();
+      formData.append('nota_numero', numero);
       files.forEach(f => formData.append('notas_fiscais', f));
 
       const response = await api.patch(`/transactions/${transaction.id}/upload-nf`, formData, {
@@ -185,6 +201,7 @@ const SecureShare = () => {
         }
       });
       setTransaction(response.data);
+      setNotaNumero('');
       alert('Nota fiscal enviada com sucesso! O status foi atualizado.');
     } catch (err) {
       alert(err?.response?.data?.detail || 'Erro ao enviar nota fiscal.');
@@ -242,7 +259,7 @@ const SecureShare = () => {
               </div>
               
               <div className="text-right">
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Valor Liberado</p>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Valor Total</p>
                 <span className="text-2xl font-black text-primary">{formatCurrency(transaction?.valor_liberado)}</span>
               </div>
 
@@ -257,8 +274,28 @@ const SecureShare = () => {
               </div>
 
               <div className="col-span-2 pt-4 border-t border-white/5">
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Cliente / Origem</p>
-                <p className="text-lg text-white/90">{transaction?.nome_cliente || "-"}</p>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Tabela de Conferência (Clientes)</p>
+                <div className="space-y-2">
+                  {transaction?.items && transaction?.items.length > 0 ? (
+                    transaction.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                        <div>
+                          <span className="text-white/90 font-medium block">{item.nome_cliente}</span>
+                          <span className="text-white/50 text-[11px]">Data de emissão: {formatItemDate(item?.data_emissao)}</span>
+                        </div>
+                        <span className="text-primary font-bold">{formatCurrency(item.valor)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                      <div>
+                        <span className="text-white/90 font-medium block">{transaction?.nome_cliente || "-"}</span>
+                        <span className="text-white/50 text-[11px]">Data de emissão: -</span>
+                      </div>
+                      <span className="text-primary font-bold">{formatCurrency(transaction?.valor_liberado)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {transaction?.descricao && (
@@ -279,6 +316,18 @@ const SecureShare = () => {
                 {/* Upload NF Button for AGUARDANDO_NF */}
                 {transaction?.status === 'AGUARDANDO_NF' && (
                   <div className="relative">
+                    <div className="mb-3">
+                      <label className="text-[10px] text-primary font-bold uppercase tracking-wider block mb-1">
+                        Número da Nota Fiscal
+                      </label>
+                      <input
+                        type="text"
+                        value={notaNumero}
+                        onChange={(e) => setNotaNumero(e.target.value)}
+                        placeholder="Ex: 12345"
+                        className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      />
+                    </div>
                     <input 
                       type="file" 
                       ref={fileInputRef}
@@ -288,8 +337,9 @@ const SecureShare = () => {
                       className="hidden"
                     />
                     <button 
+                      disabled={!notaNumero.trim()}
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex items-center justify-between p-5 bg-primary/10 border-2 border-dashed border-primary/30 rounded-2xl hover:bg-primary/20 hover:border-primary/50 transition-all group"
+                      className="w-full flex items-center justify-between p-5 bg-primary/10 border-2 border-dashed border-primary/30 rounded-2xl hover:bg-primary/20 hover:border-primary/50 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <div className="flex items-center gap-4">
                         <div className="p-3 bg-primary rounded-xl text-white shadow-lg shadow-primary/20">

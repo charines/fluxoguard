@@ -27,8 +27,10 @@ class UserBase(BaseModel):
     email: EmailStr
     telefone: Optional[str] = None
     tipo: UserType = UserType.PARCEIRO
-    cnpj_cpf: str
+    cnpj_cpf: Optional[str] = None
+    documento: Optional[str] = None
     is_active: bool = True
+    password_updated: bool = False
 
 class UserCreate(UserBase):
     pass
@@ -39,6 +41,13 @@ class AdminRegisterRequest(BaseModel):
     telefone: str
     documento_cnpj_cpf: str
     tipo: UserType = UserType.ADMIN
+
+class RegisterUserRequest(BaseModel):
+    nome: str
+    email: EmailStr
+    tipo: UserType = UserType.PARCEIRO
+    documento: Optional[str] = None
+    telefone: Optional[str] = None
 
 class UnifiedLoginRequest(BaseModel):
     identifier: str
@@ -52,8 +61,10 @@ class AuthUserProfile(BaseModel):
     nome: str
     email: EmailStr
     tipo: UserType
-    cnpj_cpf: str
+    cnpj_cpf: Optional[str]
+    documento: Optional[str]
     is_active: bool
+    password_updated: bool
 
 class LoginResponse(BaseModel):
     access_token: str
@@ -68,7 +79,9 @@ class UserUpdateRequest(BaseModel):
     email: Optional[EmailStr] = None
     telefone: Optional[str] = None
     cnpj_cpf: Optional[str] = None
+    documento: Optional[str] = None
     password: Optional[str] = None
+    password_updated: Optional[bool] = None
 
 class UserResponse(UserBase):
     id: int
@@ -76,6 +89,40 @@ class UserResponse(UserBase):
 
     class Config:
         from_attributes = True
+
+# Transaction Item Schemas
+class TransactionItemBase(BaseModel):
+    nome_cliente: str
+    valor: Decimal
+    data_emissao: Optional[str] = None
+
+class TransactionItemCreate(TransactionItemBase):
+    pass
+
+class TransactionItemResponse(TransactionItemBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# Email Template Schemas
+class EmailTemplateBase(BaseModel):
+    status: str
+    subject: str
+    body: str
+
+class EmailTemplateCreate(EmailTemplateBase):
+    pass
+
+class EmailTemplateResponse(EmailTemplateBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+class EmailPreviewResponse(BaseModel):
+    to: str
+    subject: str
+    body: str
+    magic_link: str
 
 # Transaction Schemas
 class TransactionBase(BaseModel):
@@ -92,14 +139,16 @@ class TransactionBase(BaseModel):
     notas_fiscais: List[str] = Field(default_factory=list)
     zip_contabilidade_url: Optional[str] = None
     parceiro_nome: Optional[str] = None
+    items: List[TransactionItemResponse] = []
 
 class TransactionCreate(TransactionBase):
     parceiro_id: int
     ano: int
     mes: int
     dia: int
-    nome_cliente: str
+    nome_cliente: Optional[str] = None # Backwards compatibility
     valor_liberado: Decimal
+    items: List[TransactionItemCreate] = [] # New multi-client support
 
 class TransactionResponse(TransactionBase):
     id: int

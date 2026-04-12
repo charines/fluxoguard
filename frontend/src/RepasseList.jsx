@@ -15,6 +15,7 @@ import {
   getUsersByType,
   uploadNotasFiscais,
 } from './api'
+import TransactionWizard from './TransactionWizard'
 
 const readLoggedUser = () => {
   const raw = localStorage.getItem('fluxoguard_admin_user')
@@ -39,6 +40,24 @@ const toDateInput = (tx) => {
 const formatDate = (tx) => {
   if (!tx?.ano || !tx?.mes || !tx?.dia) return '-'
   return `${String(tx.dia).padStart(2, '0')}/${String(tx.mes).padStart(2, '0')}/${tx.ano}`
+}
+
+const formatItemDate = (value) => {
+  if (!value) return '-'
+  const parts = String(value).split('-')
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
+  return value
+}
+
+const getPaymentMonthYearUpper = (tx) => {
+  const months = [
+    'JANEIRO', 'FEVEREIRO', 'MARCO', 'ABRIL', 'MAIO', 'JUNHO',
+    'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'
+  ]
+  const monthIdx = Number(tx?.mes) - 1
+  const year = tx?.ano
+  if (monthIdx >= 0 && monthIdx < 12 && year) return `${months[monthIdx]}/${year}`
+  return 'MES/ANO'
 }
 
 const canUploadNF = (tx) => ['LIBERADO', 'AGUARDANDO_NF', 'DIVERGENCIA', 'AGUARDANDO_APROVACAO'].includes(tx.status)
@@ -71,6 +90,7 @@ const RepasseList = ({ onStatsChange }) => {
 
   const [extraComprovantesMap, setExtraComprovantesMap] = useState({})
   const [nfMap, setNfMap] = useState({})
+  const [nfNumberMap, setNfNumberMap] = useState({})
 
   const [selectedMap, setSelectedMap] = useState({})
   const [processingBatch, setProcessingBatch] = useState(false)
@@ -128,12 +148,31 @@ const RepasseList = ({ onStatsChange }) => {
     if (onStatsChange) onStatsChange(stats)
   }, [stats, onStatsChange])
 
+  const getTxItems = (tx) => {
+    if (Array.isArray(tx?.items) && tx.items.length > 0) return tx.items
+    return [{ nome_cliente: tx?.nome_cliente || '-', valor: Number(tx?.valor_liberado || 0), data_emissao: null }]
+  }
+
+  const getTxTotal = (tx) => {
+    const totalFromItems = getTxItems(tx).reduce((acc, item) => acc + Number(item?.valor || 0), 0)
+    if (totalFromItems > 0) return totalFromItems
+    return Number(tx?.valor_liberado || 0)
+  }
+
   const generateMailtoLink = (parceiroEmail, status, transacaoId, tx) => {
     const config = NOTIFY_CONFIG[status] || NOTIFY_CONFIG['DEFAULT']
-    const subject = encodeURIComponent(`[FluxoGuard] Atualização da Transação #${transacaoId}`)
+    const partnerNameUpper = (tx?.parceiro_nome || 'DESTINATARIO').toUpperCase()
+    const paymentMonthYear = getPaymentMonthYearUpper(tx)
+    const subjectText = `FECHAMENTO | PAGAMENTO ${paymentMonthYear} | ${partnerNameUpper}`.toUpperCase()
+    const subject = encodeURIComponent(subjectText)
 
     const dataStr = formatDate(tx);
-    const valorStr = formatCurrency(tx.valor_liberado);
+    const totalValor = getTxTotal(tx)
+    const valorStr = formatCurrency(totalValor);
+    const txItems = getTxItems(tx)
+    const itemsList = txItems
+      .map((item, idx) => `- ${item?.nome_cliente || `Cliente ${idx + 1}`}: ${formatCurrency(item?.valor || 0)} | Emissão: ${formatItemDate(item?.data_emissao)}`)
+      .join('\n')
 
     // MAGIC LINK LOGIC
     const payload = JSON.stringify({
@@ -147,18 +186,19 @@ const RepasseList = ({ onStatsChange }) => {
     const magicLink = `${appUrl}/#/secure-share?token=${encodeURIComponent(encrypted)}`
 
     let bodyText = `${config.suggestion}\n\n`
+    bodyText += `--- CLIENTES E VALORES ---\n`
+    bodyText += `${itemsList}\n`
+    bodyText += `Total: ${valorStr}\n\n`
     bodyText += `--- DETALHES DA TRANSAÇÃO ---\n`
     bodyText += `ID: #${transacaoId}\n`
-    bodyText += `Data: ${dataStr}\n`
-    bodyText += `Parceiro: ${tx.parceiro_nome || 'N/A'}\n`
-    bodyText += `Cliente: ${tx.nome_cliente || 'N/A'}\n`
-    bodyText += `Valor: ${valorStr}\n`
+    bodyText += `Data de Pagamento: ${dataStr}\n`
+    bodyText += `Destinatário: ${tx.parceiro_nome || 'N/A'}\n`
     bodyText += `Status Atual: ${status}\n\n`
-    bodyText += `Acesse os detalhes e baixe os documentos com segurança aqui: ${magicLink}`
+    bodyText += `Acesse os detalhes e envie os documentos por este link: ${magicLink}`
 
     return {
       to: parceiroEmail,
-      subject: `[FluxoGuard] Atualização da Transação #${transacaoId}`,
+      subject: subjectText,
       body: bodyText,
       magicLink: magicLink,
       mailto: `mailto:${parceiroEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`
@@ -169,49 +209,56 @@ const RepasseList = ({ onStatsChange }) => {
     'LIBERADO': {
       title: 'Enviar Lembrete de NF',
       icon: <Clock className="w-8 h-8 text-blue-500" />,
-      suggestion: 'Lembrete: Parceiro, não esqueça de subir a Nota Fiscal do repasse para prosseguirmos com o pagamento.',
-      buttonText: 'Abrir E-mail de Lembrete',
+      subject: 'Solicitação de Nota Fiscal',
+      suggestion: 'Olá, este é um lembrete para envio da Nota Fiscal referente à transação.',
+      buttonText: 'Abrir E-mail do Lembrete',
       color: 'blue'
     },
     'AGUARDANDO_NF': {
       title: 'Enviar Lembrete de NF',
       icon: <Clock className="w-8 h-8 text-blue-500" />,
-      suggestion: 'Lembrete: Parceiro, não esqueça de subir a Nota Fiscal do repasse para prosseguirmos com o pagamento.',
-      buttonText: 'Abrir E-mail de Lembrete',
+      subject: 'Solicitação de Nota Fiscal',
+      suggestion: 'Olá, este é um lembrete para envio da Nota Fiscal referente à transação.',
+      buttonText: 'Abrir E-mail do Lembrete',
       color: 'blue'
     },
     'AGUARDANDO_APROVACAO': {
       title: 'Notificar Análise Financeira',
       icon: <Clock className="w-8 h-8 text-amber-500" />,
-      suggestion: 'Informamos que seu repasse está sendo analisado pelo nosso time financeiro. Em breve você receberá novas atualizações sobre o pagamento.',
+      subject: 'Transação em Análise',
+      suggestion: 'Olá, informamos que a transação está em análise. Em breve retornaremos com a próxima atualização.',
       buttonText: 'Enviar Aviso de Análise',
       color: 'amber'
     },
     'DIVERGENCIA': {
       title: 'Notificar Divergência',
       icon: <AlertCircle className="w-8 h-8 text-red-500" />,
-      suggestion: 'Identificamos que os documentos enviados estão divergentes. O time financeiro está analisando a situação para garantir que tudo seja corrigido o quanto antes.',
+      subject: 'Ajuste Necessário na Documentação',
+      suggestion: 'Olá, identificamos divergência na documentação enviada. Por favor, revise e faça o reenvio.',
       buttonText: 'Avisar sobre Divergência',
       color: 'red'
     },
     'PAGO': {
       title: 'Enviar Recibo de Quitação',
       icon: <FileText className="w-8 h-8 text-purple-500" />,
-      suggestion: 'Informamos que o ciclo deste repasse foi concluído com sucesso. Segue o recibo de quitação para seus registros.',
+      subject: 'Pagamento Confirmado',
+      suggestion: 'Olá, informamos que o pagamento foi concluído. Seguem os dados para seu controle.',
       buttonText: 'Enviar Recibo Final',
       color: 'purple'
     },
     'FINALIZADO': {
       title: 'Repasse Finalizado',
       icon: <Lock className="w-8 h-8 text-slate-600" />,
-      suggestion: 'Informamos que este repasse já foi finalizado no sistema. Devido ao encerramento do ciclo, os arquivos individuais não estão mais disponíveis para download. Caso necessite de alguma cópia, por favor, entre em contato com nosso time financeiro.',
+      subject: 'Processo Finalizado',
+      suggestion: 'Olá, informamos que o processo desta transação foi finalizado. Se precisar de alguma cópia, responda este e-mail.',
       buttonText: 'Avisar Finalização',
       color: 'slate'
     },
     'DEFAULT': {
-      title: 'Notificar Parceiro',
+      title: 'Notificar Destinatário',
       icon: <Bell className="w-8 h-8 text-slate-500" />,
-      suggestion: 'Olá parceiro, gostaria de falar sobre o repasse em questão.',
+      subject: 'Atualização de Transação',
+      suggestion: 'Olá, gostaria de compartilhar uma atualização sobre a transação.',
       buttonText: 'Enviar Mensagem',
       color: 'slate'
     }
@@ -376,7 +423,11 @@ const RepasseList = ({ onStatsChange }) => {
       (tx.status === 'CONFERENCIA' && activeStatuses.includes('AGUARDANDO_APROVACAO'))
     if (!matchStatus) return false
 
-    const matchSearch = tx.nome_cliente?.toLowerCase().includes(searchTerm.toLowerCase()) || tx.parceiro_nome?.toLowerCase().includes(searchTerm.toLowerCase())
+    const search = searchTerm.toLowerCase()
+    const matchByMainClient = tx.nome_cliente?.toLowerCase().includes(search)
+    const matchByPartner = tx.parceiro_nome?.toLowerCase().includes(search)
+    const matchByItems = getTxItems(tx).some((item) => (item?.nome_cliente || '').toLowerCase().includes(search))
+    const matchSearch = matchByMainClient || matchByPartner || matchByItems
     if (searchTerm && !matchSearch) return false
     if (dateFilter) {
       const txDate = toDateInput(tx)
@@ -490,8 +541,13 @@ const RepasseList = ({ onStatsChange }) => {
 
   const submitNf = async (tx) => {
     const filesToSend = nfMap[tx.id] || []
+    const notaNumero = (nfNumberMap[tx.id] || '').trim()
     if (filesToSend.length === 0) {
       alert('Selecione ao menos 1 arquivo de NF.')
+      return
+    }
+    if (!notaNumero) {
+      alert('Informe o número da nota fiscal.')
       return
     }
     if (filesToSend.length > 5) {
@@ -500,9 +556,10 @@ const RepasseList = ({ onStatsChange }) => {
     }
 
     try {
-      const updated = await uploadNotasFiscais(tx.id, filesToSend)
+      const updated = await uploadNotasFiscais(tx.id, filesToSend, notaNumero)
       setRows((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
       setNfMap((prev) => ({ ...prev, [tx.id]: [] }))
+      setNfNumberMap((prev) => ({ ...prev, [tx.id]: '' }))
     } catch (err) {
       alert(err?.response?.data?.detail || 'Erro ao enviar notas fiscais.')
     }
@@ -757,6 +814,7 @@ const RepasseList = ({ onStatsChange }) => {
                 <tbody className="divide-y divide-border/50 text-foreground">
                   {paginatedRows.map((tx) => {
                     const highlight = isPartner && tx.status === 'DIVERGENCIA'
+                    const txItems = getTxItems(tx)
                     return (
                       <tr key={tx.id} className={`transition-colors hover:bg-muted/30 ${highlight ? 'bg-destructive/5' : ''}`}>
                         {isAdmin && (
@@ -772,7 +830,28 @@ const RepasseList = ({ onStatsChange }) => {
                         )}
                         <td className="px-6 py-4">{formatDate(tx)}</td>
                         {isAdmin && <td className="px-6 py-4 font-medium">{tx.parceiro_nome || tx.parceiro_id}</td>}
-                        <td className="px-6 py-4">{tx.nome_cliente || '-'}</td>
+                        <td className="px-6 py-4 whitespace-normal">
+                          <div className="min-w-[260px] max-w-[380px] overflow-hidden rounded-xl border border-slate-200">
+                            <table className="w-full text-xs">
+                              <thead className="bg-slate-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-black uppercase tracking-wide text-slate-500">Cliente</th>
+                                  <th className="px-3 py-2 text-left font-black uppercase tracking-wide text-slate-500">Emissão</th>
+                                  <th className="px-3 py-2 text-right font-black uppercase tracking-wide text-slate-500">Valor</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {txItems.map((item, idx) => (
+                                  <tr key={`${tx.id}-item-${idx}`}>
+                                    <td className="px-3 py-2 text-slate-700">{item?.nome_cliente || '-'}</td>
+                                    <td className="px-3 py-2 text-slate-600">{formatItemDate(item?.data_emissao)}</td>
+                                    <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(item?.valor || 0)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
                         <td className="px-6 py-4 font-medium">{formatCurrency(tx.valor_liberado)}</td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1 items-start">
@@ -848,11 +927,13 @@ const RepasseList = ({ onStatsChange }) => {
 
             {/* Mobile Cards List (Full Width) */}
             <div className="md:hidden space-y-4 py-4 bg-transparent">
-              {paginatedRows.map((tx) => (
+              {paginatedRows.map((tx) => {
+                const txItems = getTxItems(tx)
+                return (
                 <div key={tx.id} className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm space-y-4 relative overflow-hidden active:bg-slate-50 transition-colors">
                   <div className="flex justify-between items-start gap-4">
                     <div className="min-w-0 flex-1">
-                      <h5 className="font-black text-slate-800 text-[15px] leading-tight truncate">{tx.nome_cliente || 'N/A'}</h5>
+                      <h5 className="font-black text-slate-800 text-[15px] leading-tight truncate">{txItems[0]?.nome_cliente || tx.nome_cliente || 'N/A'}</h5>
                       <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-1">
                         <span>{formatDate(tx)}</span>
                         <span className="w-1 h-1 rounded-full bg-slate-200"></span>
@@ -875,6 +956,27 @@ const RepasseList = ({ onStatsChange }) => {
                             <FileCell tx={tx} type="COMPROVANTE" />
                           </>
                         )}
+                      </div>
+
+                      <div className="mt-3 rounded-xl border border-slate-200 overflow-hidden">
+                        <table className="w-full text-[11px]">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-black uppercase tracking-wide text-slate-500">Cliente</th>
+                              <th className="px-3 py-2 text-left font-black uppercase tracking-wide text-slate-500">Emissão</th>
+                              <th className="px-3 py-2 text-right font-black uppercase tracking-wide text-slate-500">Valor</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {txItems.map((item, idx) => (
+                              <tr key={`${tx.id}-mobile-item-${idx}`}>
+                                <td className="px-3 py-2 text-slate-700">{item?.nome_cliente || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{formatItemDate(item?.data_emissao)}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(item?.valor || 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -927,7 +1029,7 @@ const RepasseList = ({ onStatsChange }) => {
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
 
               {filteredRows.length === 0 && (
                 <div className="p-10 text-center text-slate-400 font-bold italic text-sm bg-white rounded-3xl border border-dashed border-slate-200">
@@ -978,91 +1080,17 @@ const RepasseList = ({ onStatsChange }) => {
       </div>
 
       {newRepasseOpen && isAdmin && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <form onSubmit={handleCreateRepasse} className="bg-card w-full max-w-lg rounded-xl border border-border shadow-lg p-6 relative">
-            <button type="button" onClick={() => setNewRepasseOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-xl font-bold text-foreground mb-6">Novo Repasse</h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Parceiro</label>
-                <select
-                  value={newRepasseData.userId}
-                  onChange={e => setNewRepasseData({ ...newRepasseData, userId: e.target.value })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Selecione...</option>
-                  {partners.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.cnpj_cpf})</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Data do Repasse</label>
-                <input
-                  type="date"
-                  value={newRepasseData.dateStr}
-                  onChange={e => setNewRepasseData({ ...newRepasseData, dateStr: e.target.value })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                {newRepasseData.dateStr && (
-                  <p className="mt-1.5 text-xs font-medium text-accent-foreground">Período Selecionado: {newRepasseData.dateStr.split('-').reverse().join('/')}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Nome do Cliente</label>
-                <input
-                  type="text"
-                  value={newRepasseData.nomeCliente}
-                  onChange={e => setNewRepasseData({ ...newRepasseData, nomeCliente: e.target.value })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Ex: João da Silva"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Valor Liberado</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={newRepasseData.valorLiberado ? (Number(newRepasseData.valorLiberado.replace(/\D/g, '')) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
-                  onChange={e => setNewRepasseData({ ...newRepasseData, valorLiberado: e.target.value })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="R$ 0,00"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Comprovantes (até 5)</label>
-                <input
-                  type="file"
-                  multiple
-                  onChange={e => setNewRepasseData({ ...newRepasseData, files: Array.from(e.target.files || []) })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-muted file:text-foreground hover:file:bg-muted/80 transition-colors"
-                />
-              </div>
-            </div>
-
-            <div className="mt-8 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setNewRepasseOpen(false)}
-                className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors font-medium text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 font-medium text-sm transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Salvando...' : 'Salvar Repasse'}
-              </button>
-            </div>
-          </form>
-        </div>
+        <TransactionWizard 
+          onClose={() => setNewRepasseOpen(false)}
+          onSuccess={(payload) => {
+            loadRows();
+            if (payload?.partnerName) {
+              setSearchTerm(payload.partnerName);
+              setCurrentPage(1);
+            }
+            setNewRepasseOpen(false);
+          }}
+        />
       )}
 
       {/* Edit Modal Additions */}
@@ -1160,6 +1188,19 @@ const RepasseList = ({ onStatsChange }) => {
               <p className="text-xs text-muted-foreground mb-5">
                 Repasse #{modalTx.id} — {modalTx.nome_cliente || 'Sem cliente'}
               </p>
+              <div className="mb-5 rounded-lg border border-border bg-muted/20 p-3 space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Data de Pagamento: <span className="font-semibold text-foreground">{formatDate(modalTx)}</span>
+                </p>
+                <div className="text-xs text-muted-foreground">
+                  <p className="mb-1">Datas de Emissão:</p>
+                  {getTxItems(modalTx).map((item, idx) => (
+                    <p key={`${modalTx.id}-nf-data-${idx}`}>
+                      - {item?.nome_cliente || `Cliente ${idx + 1}`}: {formatItemDate(item?.data_emissao)}
+                    </p>
+                  ))}
+                </div>
+              </div>
 
               {/* Upload Section */}
               {canUploadModal && (
@@ -1171,6 +1212,15 @@ const RepasseList = ({ onStatsChange }) => {
                   <p className="text-xs text-muted-foreground">
                     {modalCount}/5 enviado(s) — Pode enviar mais {modalRemaining}
                   </p>
+                  {!isComp && (
+                    <input
+                      type="text"
+                      value={nfNumberMap[modalTx.id] || ''}
+                      onChange={(e) => setNfNumberMap((prev) => ({ ...prev, [modalTx.id]: e.target.value }))}
+                      placeholder="Número da nota fiscal (obrigatório)"
+                      className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  )}
                   <input
                     type="file"
                     multiple
@@ -1185,7 +1235,12 @@ const RepasseList = ({ onStatsChange }) => {
                     }}
                     disabled={isComp
                       ? (!extraComprovantesMap[modalTx.id] || extraComprovantesMap[modalTx.id]?.length === 0 || extraComprovantesMap[modalTx.id]?.length > modalRemaining)
-                      : (!nfMap[modalTx.id] || nfMap[modalTx.id]?.length === 0 || nfMap[modalTx.id]?.length > 5)
+                      : (
+                        !nfMap[modalTx.id] ||
+                        nfMap[modalTx.id]?.length === 0 ||
+                        nfMap[modalTx.id]?.length > 5 ||
+                        !(nfNumberMap[modalTx.id] || '').trim()
+                      )
                     }
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
                   >
@@ -1255,6 +1310,7 @@ const RepasseList = ({ onStatsChange }) => {
       {/* Notify Modal */}
       {notifyModal && (() => {
         const config = NOTIFY_CONFIG[notifyModal.status] || NOTIFY_CONFIG['DEFAULT']
+        const emailData = generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal)
         return (
           <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 overflow-y-auto" onClick={() => setNotifyModal(null)}>
             <div className="flex min-h-full items-center justify-center p-4">
@@ -1286,17 +1342,24 @@ const RepasseList = ({ onStatsChange }) => {
                       <div className="text-[11px] text-muted-foreground space-y-1 pt-3 border-t border-border/50">
                         <p>--- DETALHES ---</p>
                         <p>ID: #{notifyModal.id}</p>
-                        <p>Data: {formatDate(notifyModal)}</p>
-                        <p>Parceiro: {notifyModal.parceiro_nome || 'N/A'}</p>
-                        <p>Cliente: {notifyModal.nome_cliente || 'N/A'}</p>
-                        <p>Valor: {formatCurrency(notifyModal.valor_liberado)}</p>
+                        <p>Data de Pagamento: {formatDate(notifyModal)}</p>
+                        <p>Destinatário: {notifyModal.parceiro_nome || 'N/A'}</p>
+                        <p>Clientes e valores:</p>
+                        <div className="pl-3 space-y-0.5">
+                          {getTxItems(notifyModal).map((item, idx) => (
+                            <p key={`${notifyModal.id}-preview-item-${idx}`}>
+                              - {item?.nome_cliente || `Cliente ${idx + 1}`}: {formatCurrency(item?.valor || 0)} | Emissão: {formatItemDate(item?.data_emissao)}
+                            </p>
+                          ))}
+                        </div>
+                        <p>Total: {formatCurrency(getTxTotal(notifyModal))}</p>
                         <p>Status: {notifyModal.status}</p>
                       </div>
                     </div>
                   </div>
 
                   <a
-                    href={generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal).mailto}
+                    href={emailData.mailto}
                     onClick={() => setNotifyModal(null)}
                     className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl text-white font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-lg ${config.color === 'emerald' ? 'bg-emerald-600 shadow-emerald-500/20' :
                       config.color === 'red' ? 'bg-red-600 shadow-red-500/20' :
@@ -1308,10 +1371,18 @@ const RepasseList = ({ onStatsChange }) => {
                     <Mail className="w-5 h-5" /> {config.buttonText}
                   </a>
 
+                  <a
+                    href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailData.to || '')}&su=${encodeURIComponent(emailData.subject || '')}&body=${encodeURIComponent(emailData.body || '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-sm transition-all"
+                  >
+                    <Mail className="w-4 h-4" /> Abrir Lembrete no Gmail
+                  </a>
+
                   <button
                     onClick={() => {
-                      const data = generateMailtoLink(notifyModal.parceiro_email || '', notifyModal.status, notifyModal.id, notifyModal);
-                      setEmailPreview(data);
+                      setEmailPreview(emailData);
                     }}
                     className="mt-3 w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-border bg-background text-foreground hover:bg-muted font-bold text-sm transition-all"
                   >
@@ -1371,7 +1442,15 @@ const RepasseList = ({ onStatsChange }) => {
                   </button>
                   <div className="flex gap-4 mt-3">
                     <a href={emailPreview.magicLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 underline underline-offset-4">
-                      <ExternalLink className="w-3 h-3" /> Abrir no navegador
+                      <ExternalLink className="w-3 h-3" /> Visualizar
+                    </a>
+                    <a
+                      href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailPreview.to || '')}&su=${encodeURIComponent(emailPreview.subject || '')}&body=${encodeURIComponent(emailPreview.body || '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 underline underline-offset-4"
+                    >
+                      <Mail className="w-3 h-3" /> Abrir no Gmail
                     </a>
                   </div>
                 </div>

@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { HashRouter, Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { createRepasse, getUsers, getUsersByType, login, updateUser, updateUserActive } from './api'
 import { LayoutDashboard, LogIn, ShieldCheck, Users, ChevronDown, Shield, BarChart3, Clock, AlertTriangle, CheckCircle, AlertCircle, Lock } from 'lucide-react'
-import AdminRegister from './AdminRegister'
 import RepasseList from './RepasseList'
 import LandingPage from './LandingPage'
 import { ApiHealthProvider, useApiHealth } from './ApiHealthContext'
 import HealthScreen from './HealthScreen'
 import SecureShare from './SecureShare'
+import RegistrationOnboarding from './RegistrationOnboarding'
 
 const getLoggedUser = () => {
   const rawUser = localStorage.getItem('fluxoguard_admin_user')
@@ -618,9 +618,12 @@ const ManageUsersPage = () => {
     }
   }, [navigate])
 
+  const initialType = scope === 'admins' ? 'ADMIN' : 'PARCEIRO'
+  const title = scope === 'admins' ? 'Gestão de Administradores' : 'Gestão de Parceiros'
+  
   return (
-    <DashboardLayout title="Gestão de Usuários">
-      <AdminRegister scope={scope} />
+    <DashboardLayout title={title}>
+      <RegistrationOnboarding initialType={initialType} currentUser={getLoggedUser()} />
     </DashboardLayout>
   )
 }

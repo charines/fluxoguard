@@ -10,13 +10,32 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     telefone = Column(String(30), nullable=True)
     tipo = Column(Enum("SUPERADMIN", "ADMIN", "PARCEIRO", name="user_type"), default="PARCEIRO")
-    cnpj_cpf = Column(String(20), unique=True, nullable=False)
+    cnpj_cpf = Column(String(20), unique=True, nullable=True) # Mantendo legibilidade, mas agora documento é o foco
+    documento = Column(String(18), unique=True, index=True, nullable=True)
     password = Column(String(50), nullable=True)
+    password_updated = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     
     # Relationships
     transactions = relationship("Transaction", back_populates="parceiro")
     auth_tokens = relationship("AuthToken", back_populates="user")
+
+class TransactionItem(Base):
+    __tablename__ = "transaction_items"
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"))
+    nome_cliente = Column(String(255), nullable=False)
+    valor = Column(Float, nullable=False)
+    data_emissao = Column(String(10), nullable=True)  # YYYY-MM-DD
+    
+    transaction = relationship("Transaction", back_populates="items")
+
+class EmailTemplate(Base):
+    __tablename__ = "email_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    status = Column(String(50), unique=True, index=True) # AGUARDANDO_NOTA, PAGO, FINALIZADO, etc
+    subject = Column(String(255), nullable=False)
+    body = Column(String(5000), nullable=False)
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -51,6 +70,7 @@ class Transaction(Base):
 
     # Relationships
     parceiro = relationship("User", back_populates="transactions")
+    items = relationship("TransactionItem", back_populates="transaction", cascade="all, delete-orphan")
 
 class AuthToken(Base):
     __tablename__ = "auth_tokens"
