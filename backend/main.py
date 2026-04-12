@@ -2,6 +2,7 @@ import os
 import json
 import zipfile
 import io
+import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
@@ -1102,12 +1103,16 @@ async def upload_nf(
     if not current_partner:
         raise HTTPException(status_code=401, detail="Acesso restrito ao parceiro proprietário")
 
+    nota_numero = (nota_numero or "").strip()
+
     if len(notas_fiscais) == 0:
         raise HTTPException(status_code=400, detail="Envie ao menos 1 arquivo.")
     if len(notas_fiscais) > 5:
         raise HTTPException(status_code=400, detail="Máximo de 5 notas fiscais.")
-    if not (nota_numero or "").strip():
+    if not nota_numero:
         raise HTTPException(status_code=400, detail="Informe o número da nota fiscal.")
+    if not re.fullmatch(r"\d+", nota_numero):
+        raise HTTPException(status_code=400, detail="O número da nota fiscal deve conter apenas dígitos.")
 
     for item in notas_fiscais:
         if not (item.filename or "").lower().endswith(".pdf"):

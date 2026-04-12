@@ -61,6 +61,8 @@ const getPaymentMonthYearUpper = (tx) => {
 }
 
 const canUploadNF = (tx) => ['LIBERADO', 'AGUARDANDO_NF', 'DIVERGENCIA', 'AGUARDANDO_APROVACAO'].includes(tx.status)
+const sanitizeNfNumber = (value) => String(value || '').replace(/\D/g, '')
+const isNfNumberValid = (value) => /^\d+$/.test(String(value || '').trim())
 
 const RepasseList = ({ onStatsChange }) => {
   const loggedUser = readLoggedUser()
@@ -548,6 +550,10 @@ const RepasseList = ({ onStatsChange }) => {
     }
     if (!notaNumero) {
       alert('Informe o número da nota fiscal.')
+      return
+    }
+    if (!isNfNumberValid(notaNumero)) {
+      alert('O número da nota fiscal deve conter apenas números.')
       return
     }
     if (filesToSend.length > 5) {
@@ -1216,8 +1222,20 @@ const RepasseList = ({ onStatsChange }) => {
                     <input
                       type="text"
                       value={nfNumberMap[modalTx.id] || ''}
-                      onChange={(e) => setNfNumberMap((prev) => ({ ...prev, [modalTx.id]: e.target.value }))}
+                      onChange={(e) => setNfNumberMap((prev) => ({ ...prev, [modalTx.id]: sanitizeNfNumber(e.target.value) }))}
+                      onKeyDown={(e) => {
+                        const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End']
+                        if (allowed.includes(e.key) || (e.ctrlKey || e.metaKey)) return
+                        if (!/^\d$/.test(e.key)) e.preventDefault()
+                      }}
+                      onPaste={(e) => {
+                        e.preventDefault()
+                        const pasted = e.clipboardData?.getData('text') || ''
+                        setNfNumberMap((prev) => ({ ...prev, [modalTx.id]: sanitizeNfNumber(pasted) }))
+                      }}
                       placeholder="Número da nota fiscal (obrigatório)"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   )}
