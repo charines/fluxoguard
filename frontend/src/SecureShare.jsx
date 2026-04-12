@@ -323,8 +323,10 @@ const SecureShare = () => {
                       <input
                         type="text"
                         value={notaNumero}
-                        onChange={(e) => setNotaNumero(e.target.value)}
+                        onChange={(e) => setNotaNumero(e.target.value.replace(/\D/g, ''))}
                         placeholder="Ex: 12345"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
                       />
                     </div>
