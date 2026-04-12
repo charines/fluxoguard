@@ -26,6 +26,7 @@ class TransactionItem(Base):
     transaction_id = Column(Integer, ForeignKey("transactions.id"))
     nome_cliente = Column(String(255), nullable=False)
     valor = Column(Float, nullable=False)
+    data_emissao = Column(String(10), nullable=True)  # YYYY-MM-DD
     
     transaction = relationship("Transaction", back_populates="items")
 

@@ -308,7 +308,15 @@ def serialize_transaction(tx: Transaction, current_user: Optional[User] = None) 
         "notas_fiscais": notas_fiscais,
         "zip_contabilidade_url": zip_url,
         "data_criacao": tx.data_criacao.isoformat() if tx.data_criacao else None,
-        "items": [{"id": item.id, "nome_cliente": item.nome_cliente, "valor": item.valor} for item in tx.items]
+        "items": [
+            {
+                "id": item.id,
+                "nome_cliente": item.nome_cliente,
+                "valor": item.valor,
+                "data_emissao": item.data_emissao,
+            }
+            for item in tx.items
+        ]
     }
 
 
@@ -566,6 +574,16 @@ def post_registration_tasks(user_id: int):
     # Aqui entraria a lógica de 'criar pastas no Supabase' se fosse necessário
     pass
 
+
+def post_transaction_tasks(transaction_id: int):
+    """
+    Tarefas secundárias pós-criação de repasse.
+    Mantém o padrão de job/background já usado em cadastro de usuários.
+    """
+    print(f"[JOB] Executando tarefas pós-cadastro para repasse {transaction_id}")
+    # Exemplo: notificação assíncrona, integração externa, auditoria, etc.
+    pass
+
 @app.get("/users/check-availability")
 def check_availability(
     email: Optional[str] = None,
@@ -796,6 +814,7 @@ def download_file(
 
 @app.post("/transactions")
 async def create_transaction(
+    background_tasks: BackgroundTasks,
     user_id: int = Form(...),
     ano: int = Form(...),
     mes: int = Form(...),
@@ -814,6 +833,29 @@ async def create_transaction(
     if not db_parceiro:
         raise HTTPException(status_code=404, detail="Parceiro não encontrado")
 
+    parsed_items = []
+    if items_json:
+        try:
+            parsed_items = json.loads(items_json)
+            if not isinstance(parsed_items, list) or len(parsed_items) == 0:
+                raise HTTPException(status_code=422, detail="items_json inválido.")
+
+            for idx, item in enumerate(parsed_items):
+                nome_cliente_item = (item.get("nome_cliente") or "").strip()
+                valor_item = item.get("valor")
+                data_emissao_item = (item.get("data_emissao") or "").strip()
+
+                if not nome_cliente_item:
+                    raise HTTPException(status_code=422, detail=f"Nome do cliente inválido no item {idx + 1}.")
+                if valor_item in [None, ""]:
+                    raise HTTPException(status_code=422, detail=f"Valor inválido no item {idx + 1}.")
+                if not data_emissao_item:
+                    raise HTTPException(status_code=422, detail=f"Data de emissão obrigatória no item {idx + 1}.")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=422, detail="items_json inválido.")
+
     valor_liberado_value = normalize_money(valor_liberado)
     comprovantes_paths = await save_upload_files_supabase(comprovantes, "comprovantes")
     
@@ -831,21 +873,22 @@ async def create_transaction(
     db.add(new_transaction)
     db.flush() 
 
-    if items_json:
-        try:
-            items_data = json.loads(items_json)
-            for item in items_data:
-                db_item = TransactionItem(
-                    transaction_id=new_transaction.id,
-                    nome_cliente=item.get("nome_cliente"),
-                    valor=float(item.get("valor"))
-                )
-                db.add(db_item)
-        except Exception as e:
-            print(f"Erro ao processar items_json: {e}")
+    if parsed_items:
+        for item in parsed_items:
+            db_item = TransactionItem(
+                transaction_id=new_transaction.id,
+                nome_cliente=item.get("nome_cliente"),
+                valor=float(item.get("valor")),
+                data_emissao=item.get("data_emissao"),
+            )
+            db.add(db_item)
 
     db.commit()
     db.refresh(new_transaction)
+
+    # Agenda tarefas secundárias para o background
+    background_tasks.add_task(post_transaction_tasks, new_transaction.id)
+
     return serialize_transaction(new_transaction)
 
 def generate_magic_link(tx: Transaction):
@@ -881,19 +924,44 @@ def generate_email_context(tx: Transaction, status: str, db: Session):
     
     tpl_data = {"subject": template.subject, "body": template.body} if template else defaults.get(status, {"subject": "Notificação", "body": "Olá"})
     
+    def fmt_br_date(value: Optional[str]) -> str:
+        if not value:
+            return "-"
+        try:
+            yyyy, mm, dd = value.split("-")
+            return f"{dd}/{mm}/{yyyy}"
+        except Exception:
+            return value
+
     items_list = ""
     if tx.items:
-        items_list = "\n".join([f"- {item.nome_cliente}: R$ {item.valor:,.2f}" for item in tx.items])
+        items_list = "\n".join(
+            [
+                f"- {item.nome_cliente}: R$ {item.valor:,.2f} | Emissão: {fmt_br_date(item.data_emissao)}"
+                for item in tx.items
+            ]
+        )
     else:
         items_list = f"- {tx.nome_cliente}: R$ {tx.valor_liberado:,.2f}"
 
     magic_link = generate_magic_link(tx)
     total_format = f"R$ {tx.valor_liberado:,.2f}"
+    data_pagamento = f"{str(tx.dia).zfill(2)}/{str(tx.mes).zfill(2)}/{tx.ano}" if tx.ano and tx.mes and tx.dia else "-"
     
-    body = tpl_data["body"].format(
+    body_template = tpl_data["body"]
+    if "{data_pagamento}" not in body_template:
+        body_template = body_template.replace(
+            "--- DETALHES DA TRANSAÇÃO ---",
+            "--- DETALHES DA TRANSAÇÃO ---\nData de Pagamento: {data_pagamento}",
+        )
+        if "{data_pagamento}" not in body_template:
+            body_template += "\n\nData de Pagamento: {data_pagamento}"
+
+    body = body_template.format(
         total=total_format,
         lista_clientes_valores=items_list,
-        magic_link=magic_link
+        magic_link=magic_link,
+        data_pagamento=data_pagamento,
     ).replace("\\n", "\n")
     
     return {

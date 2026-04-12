@@ -94,6 +94,7 @@ class UserResponse(UserBase):
 class TransactionItemBase(BaseModel):
     nome_cliente: str
     valor: Decimal
+    data_emissao: Optional[str] = None
 
 class TransactionItemCreate(TransactionItemBase):
     pass

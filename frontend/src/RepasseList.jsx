@@ -42,6 +42,24 @@ const formatDate = (tx) => {
   return `${String(tx.dia).padStart(2, '0')}/${String(tx.mes).padStart(2, '0')}/${tx.ano}`
 }
 
+const formatItemDate = (value) => {
+  if (!value) return '-'
+  const parts = String(value).split('-')
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
+  return value
+}
+
+const getPaymentMonthYearUpper = (tx) => {
+  const months = [
+    'JANEIRO', 'FEVEREIRO', 'MARCO', 'ABRIL', 'MAIO', 'JUNHO',
+    'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'
+  ]
+  const monthIdx = Number(tx?.mes) - 1
+  const year = tx?.ano
+  if (monthIdx >= 0 && monthIdx < 12 && year) return `${months[monthIdx]}/${year}`
+  return 'MES/ANO'
+}
+
 const canUploadNF = (tx) => ['LIBERADO', 'AGUARDANDO_NF', 'DIVERGENCIA', 'AGUARDANDO_APROVACAO'].includes(tx.status)
 
 const RepasseList = ({ onStatsChange }) => {
@@ -131,7 +149,7 @@ const RepasseList = ({ onStatsChange }) => {
 
   const getTxItems = (tx) => {
     if (Array.isArray(tx?.items) && tx.items.length > 0) return tx.items
-    return [{ nome_cliente: tx?.nome_cliente || '-', valor: Number(tx?.valor_liberado || 0) }]
+    return [{ nome_cliente: tx?.nome_cliente || '-', valor: Number(tx?.valor_liberado || 0), data_emissao: null }]
   }
 
   const getTxTotal = (tx) => {
@@ -142,7 +160,9 @@ const RepasseList = ({ onStatsChange }) => {
 
   const generateMailtoLink = (parceiroEmail, status, transacaoId, tx) => {
     const config = NOTIFY_CONFIG[status] || NOTIFY_CONFIG['DEFAULT']
-    const subjectText = config.subject || `Atualização da Transação #${transacaoId}`
+    const partnerNameUpper = (tx?.parceiro_nome || 'DESTINATARIO').toUpperCase()
+    const paymentMonthYear = getPaymentMonthYearUpper(tx)
+    const subjectText = `FECHAMENTO | PAGAMENTO ${paymentMonthYear} | ${partnerNameUpper}`.toUpperCase()
     const subject = encodeURIComponent(subjectText)
 
     const dataStr = formatDate(tx);
@@ -150,7 +170,7 @@ const RepasseList = ({ onStatsChange }) => {
     const valorStr = formatCurrency(totalValor);
     const txItems = getTxItems(tx)
     const itemsList = txItems
-      .map((item, idx) => `- ${item?.nome_cliente || `Cliente ${idx + 1}`}: ${formatCurrency(item?.valor || 0)}`)
+      .map((item, idx) => `- ${item?.nome_cliente || `Cliente ${idx + 1}`}: ${formatCurrency(item?.valor || 0)} | Emissão: ${formatItemDate(item?.data_emissao)}`)
       .join('\n')
 
     // MAGIC LINK LOGIC
@@ -170,7 +190,7 @@ const RepasseList = ({ onStatsChange }) => {
     bodyText += `Total: ${valorStr}\n\n`
     bodyText += `--- DETALHES DA TRANSAÇÃO ---\n`
     bodyText += `ID: #${transacaoId}\n`
-    bodyText += `Data: ${dataStr}\n`
+    bodyText += `Data de Pagamento: ${dataStr}\n`
     bodyText += `Destinatário: ${tx.parceiro_nome || 'N/A'}\n`
     bodyText += `Status Atual: ${status}\n\n`
     bodyText += `Acesse os detalhes e envie os documentos por este link: ${magicLink}`
@@ -809,6 +829,7 @@ const RepasseList = ({ onStatsChange }) => {
                               <thead className="bg-slate-50">
                                 <tr>
                                   <th className="px-3 py-2 text-left font-black uppercase tracking-wide text-slate-500">Cliente</th>
+                                  <th className="px-3 py-2 text-left font-black uppercase tracking-wide text-slate-500">Emissão</th>
                                   <th className="px-3 py-2 text-right font-black uppercase tracking-wide text-slate-500">Valor</th>
                                 </tr>
                               </thead>
@@ -816,6 +837,7 @@ const RepasseList = ({ onStatsChange }) => {
                                 {txItems.map((item, idx) => (
                                   <tr key={`${tx.id}-item-${idx}`}>
                                     <td className="px-3 py-2 text-slate-700">{item?.nome_cliente || '-'}</td>
+                                    <td className="px-3 py-2 text-slate-600">{formatItemDate(item?.data_emissao)}</td>
                                     <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(item?.valor || 0)}</td>
                                   </tr>
                                 ))}
@@ -934,6 +956,7 @@ const RepasseList = ({ onStatsChange }) => {
                           <thead className="bg-slate-50">
                             <tr>
                               <th className="px-3 py-2 text-left font-black uppercase tracking-wide text-slate-500">Cliente</th>
+                              <th className="px-3 py-2 text-left font-black uppercase tracking-wide text-slate-500">Emissão</th>
                               <th className="px-3 py-2 text-right font-black uppercase tracking-wide text-slate-500">Valor</th>
                             </tr>
                           </thead>
@@ -941,6 +964,7 @@ const RepasseList = ({ onStatsChange }) => {
                             {txItems.map((item, idx) => (
                               <tr key={`${tx.id}-mobile-item-${idx}`}>
                                 <td className="px-3 py-2 text-slate-700">{item?.nome_cliente || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{formatItemDate(item?.data_emissao)}</td>
                                 <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(item?.valor || 0)}</td>
                               </tr>
                             ))}
@@ -1157,6 +1181,19 @@ const RepasseList = ({ onStatsChange }) => {
               <p className="text-xs text-muted-foreground mb-5">
                 Repasse #{modalTx.id} — {modalTx.nome_cliente || 'Sem cliente'}
               </p>
+              <div className="mb-5 rounded-lg border border-border bg-muted/20 p-3 space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Data de Pagamento: <span className="font-semibold text-foreground">{formatDate(modalTx)}</span>
+                </p>
+                <div className="text-xs text-muted-foreground">
+                  <p className="mb-1">Datas de Emissão:</p>
+                  {getTxItems(modalTx).map((item, idx) => (
+                    <p key={`${modalTx.id}-nf-data-${idx}`}>
+                      - {item?.nome_cliente || `Cliente ${idx + 1}`}: {formatItemDate(item?.data_emissao)}
+                    </p>
+                  ))}
+                </div>
+              </div>
 
               {/* Upload Section */}
               {canUploadModal && (
@@ -1284,13 +1321,13 @@ const RepasseList = ({ onStatsChange }) => {
                       <div className="text-[11px] text-muted-foreground space-y-1 pt-3 border-t border-border/50">
                         <p>--- DETALHES ---</p>
                         <p>ID: #{notifyModal.id}</p>
-                        <p>Data: {formatDate(notifyModal)}</p>
+                        <p>Data de Pagamento: {formatDate(notifyModal)}</p>
                         <p>Destinatário: {notifyModal.parceiro_nome || 'N/A'}</p>
                         <p>Clientes e valores:</p>
                         <div className="pl-3 space-y-0.5">
                           {getTxItems(notifyModal).map((item, idx) => (
                             <p key={`${notifyModal.id}-preview-item-${idx}`}>
-                              - {item?.nome_cliente || `Cliente ${idx + 1}`}: {formatCurrency(item?.valor || 0)}
+                              - {item?.nome_cliente || `Cliente ${idx + 1}`}: {formatCurrency(item?.valor || 0)} | Emissão: {formatItemDate(item?.data_emissao)}
                             </p>
                           ))}
                         </div>

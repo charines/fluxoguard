@@ -18,6 +18,13 @@ const formatDate = (tx) => {
   return `${String(tx.dia).padStart(2, '0')}/${String(tx.mes).padStart(2, '0')}/${tx.ano}`;
 };
 
+const formatItemDate = (value) => {
+  if (!value) return '-';
+  const parts = String(value).split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return value;
+};
+
 const SecureShare = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -262,13 +269,19 @@ const SecureShare = () => {
                   {transaction?.items && transaction?.items.length > 0 ? (
                     transaction.items.map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
-                        <span className="text-white/90 font-medium">{item.nome_cliente}</span>
+                        <div>
+                          <span className="text-white/90 font-medium block">{item.nome_cliente}</span>
+                          <span className="text-white/50 text-[11px]">Data de emissão: {formatItemDate(item?.data_emissao)}</span>
+                        </div>
                         <span className="text-primary font-bold">{formatCurrency(item.valor)}</span>
                       </div>
                     ))
                   ) : (
                     <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
-                      <span className="text-white/90 font-medium">{transaction?.nome_cliente || "-"}</span>
+                      <div>
+                        <span className="text-white/90 font-medium block">{transaction?.nome_cliente || "-"}</span>
+                        <span className="text-white/50 text-[11px]">Data de emissão: -</span>
+                      </div>
                       <span className="text-primary font-bold">{formatCurrency(transaction?.valor_liberado)}</span>
                     </div>
                   )}

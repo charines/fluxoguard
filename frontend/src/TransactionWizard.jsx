@@ -20,6 +20,14 @@ const formatCurrency = (value) => {
   return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
+const getTodayInputValue = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const MoneyInput = ({ value, onChange, label }) => {
   const [displayValue, setDisplayValue] = useState('');
 
@@ -66,7 +74,8 @@ const TransactionWizard = ({ onClose, onSuccess }) => {
   // State
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [partnerSearch, setPartnerSearch] = useState('');
-  const [items, setItems] = useState([{ id: Date.now(), nome_cliente: '', valor: '' }]);
+  const [paymentDate, setPaymentDate] = useState(getTodayInputValue());
+  const [items, setItems] = useState([{ id: Date.now(), nome_cliente: '', valor: '', data_emissao: '' }]);
   const [createdTxId, setCreatedTxId] = useState(null);
 
   useEffect(() => {
@@ -92,7 +101,7 @@ const TransactionWizard = ({ onClose, onSuccess }) => {
   }, [partners, selectedPartnerId]);
 
   const handleAddItem = () => {
-    setItems([...items, { id: Date.now(), nome_cliente: '', valor: '' }]);
+    setItems([...items, { id: Date.now(), nome_cliente: '', valor: '', data_emissao: '' }]);
   };
 
   const handleRemoveItem = (id) => {
@@ -110,20 +119,23 @@ const TransactionWizard = ({ onClose, onSuccess }) => {
   };
 
   const handleNextStep2 = async () => {
-    if (items.some(i => !i.nome_cliente.trim() || !i.valor || Number(i.valor) <= 0)) {
-      return alert('Preencha os dados dos clientes corretamente.');
+    if (!paymentDate) {
+      return alert('Informe a data de pagamento.');
+    }
+    if (items.some(i => !i.nome_cliente.trim() || !i.valor || Number(i.valor) <= 0 || !i.data_emissao)) {
+      return alert('Preencha nome, valor e data de emissão de todos os clientes.');
     }
     
     setLoading(true);
     try {
-      const today = new Date();
+      const [ano, mes, dia] = paymentDate.split('-');
       const formData = new FormData();
       formData.append('user_id', selectedPartnerId);
-      formData.append('ano', today.getFullYear());
-      formData.append('mes', today.getMonth() + 1);
-      formData.append('dia', today.getDate());
+      formData.append('ano', Number(ano));
+      formData.append('mes', Number(mes));
+      formData.append('dia', Number(dia));
       formData.append('valor_liberado', totalRepasse.toFixed(2));
-      formData.append('items_json', JSON.stringify(items.map(i => ({ nome_cliente: i.nome_cliente, valor: i.valor }))));
+      formData.append('items_json', JSON.stringify(items.map(i => ({ nome_cliente: i.nome_cliente, valor: i.valor, data_emissao: i.data_emissao }))));
       
       const res = await createRepasse(formData);
       setCreatedTxId(res.id);
@@ -272,6 +284,16 @@ const TransactionWizard = ({ onClose, onSuccess }) => {
                 </button>
               </div>
 
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Data de Pagamento</label>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full md:w-56 bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                />
+              </div>
+
               <div className="space-y-3 max-h-[42vh] overflow-y-auto pr-1">
                 {items.map((item) => (
                   <div key={item.id} className="flex flex-wrap md:flex-nowrap items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
@@ -290,8 +312,17 @@ const TransactionWizard = ({ onClose, onSuccess }) => {
                       value={item.valor}
                       onChange={(v) => handleItemChange(item.id, 'valor', v)}
                     />
+                    <div className="w-full md:w-44 flex-shrink-0">
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Data de Emissão</label>
+                      <input
+                        type="date"
+                        value={item.data_emissao || ''}
+                        onChange={(e) => handleItemChange(item.id, 'data_emissao', e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      />
+                    </div>
                     <div className="flex items-center gap-1 mt-4 md:mt-0">
-                      {(item.nome_cliente.trim() || item.valor) && (
+                      {(item.nome_cliente.trim() || item.valor || item.data_emissao) && (
                         <button
                           onClick={handleAddItem}
                           className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"
