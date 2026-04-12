@@ -35,7 +35,9 @@ export const getUsersByType = async (tipo) => {
 };
 
 export const createTransaction = async (data) => {
-  const response = await api.post('/transactions', data);
+  const response = await api.post('/transactions', data, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 };
 
@@ -192,5 +194,21 @@ export const checkHealth = async () => {
   const response = await api.get('/health');
   return response.data;
 };
+
+// Email Templates & Previews
+export const getEmailPreview = (transactionId, status) => 
+  api.get(`/transactions/${transactionId}/email-preview?status=${status}`, {
+    headers: getAuthHeaders(),
+  }).then(r => r.data)
+
+export const createEmailTemplate = (payload) =>
+  api.post('/email-templates', payload, {
+    headers: getAuthHeaders(),
+  }).then(r => r.data)
+
+export const getEmailTemplates = () =>
+  api.get('/email-templates', {
+    headers: getAuthHeaders(),
+  }).then(r => r.data)
 
 export default api;

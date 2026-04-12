@@ -15,6 +15,7 @@ import {
   getUsersByType,
   uploadNotasFiscais,
 } from './api'
+import TransactionWizard from './TransactionWizard'
 
 const readLoggedUser = () => {
   const raw = localStorage.getItem('fluxoguard_admin_user')
@@ -978,91 +979,17 @@ const RepasseList = ({ onStatsChange }) => {
       </div>
 
       {newRepasseOpen && isAdmin && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <form onSubmit={handleCreateRepasse} className="bg-card w-full max-w-lg rounded-xl border border-border shadow-lg p-6 relative">
-            <button type="button" onClick={() => setNewRepasseOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-xl font-bold text-foreground mb-6">Novo Repasse</h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Parceiro</label>
-                <select
-                  value={newRepasseData.userId}
-                  onChange={e => setNewRepasseData({ ...newRepasseData, userId: e.target.value })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Selecione...</option>
-                  {partners.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.cnpj_cpf})</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Data do Repasse</label>
-                <input
-                  type="date"
-                  value={newRepasseData.dateStr}
-                  onChange={e => setNewRepasseData({ ...newRepasseData, dateStr: e.target.value })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                {newRepasseData.dateStr && (
-                  <p className="mt-1.5 text-xs font-medium text-accent-foreground">Período Selecionado: {newRepasseData.dateStr.split('-').reverse().join('/')}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Nome do Cliente</label>
-                <input
-                  type="text"
-                  value={newRepasseData.nomeCliente}
-                  onChange={e => setNewRepasseData({ ...newRepasseData, nomeCliente: e.target.value })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Ex: João da Silva"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Valor Liberado</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={newRepasseData.valorLiberado ? (Number(newRepasseData.valorLiberado.replace(/\D/g, '')) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
-                  onChange={e => setNewRepasseData({ ...newRepasseData, valorLiberado: e.target.value })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="R$ 0,00"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Comprovantes (até 5)</label>
-                <input
-                  type="file"
-                  multiple
-                  onChange={e => setNewRepasseData({ ...newRepasseData, files: Array.from(e.target.files || []) })}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-muted file:text-foreground hover:file:bg-muted/80 transition-colors"
-                />
-              </div>
-            </div>
-
-            <div className="mt-8 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setNewRepasseOpen(false)}
-                className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors font-medium text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 font-medium text-sm transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Salvando...' : 'Salvar Repasse'}
-              </button>
-            </div>
-          </form>
-        </div>
+        <TransactionWizard 
+          onClose={() => setNewRepasseOpen(false)}
+          onSuccess={(payload) => {
+            loadRows();
+            if (payload?.partnerName) {
+              setSearchTerm(payload.partnerName);
+              setCurrentPage(1);
+            }
+            setNewRepasseOpen(false);
+          }}
+        />
       )}
 
       {/* Edit Modal Additions */}

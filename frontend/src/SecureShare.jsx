@@ -242,7 +242,7 @@ const SecureShare = () => {
               </div>
               
               <div className="text-right">
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Valor Liberado</p>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Valor Total</p>
                 <span className="text-2xl font-black text-primary">{formatCurrency(transaction?.valor_liberado)}</span>
               </div>
 
@@ -257,8 +257,22 @@ const SecureShare = () => {
               </div>
 
               <div className="col-span-2 pt-4 border-t border-white/5">
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Cliente / Origem</p>
-                <p className="text-lg text-white/90">{transaction?.nome_cliente || "-"}</p>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Tabela de Conferência (Clientes)</p>
+                <div className="space-y-2">
+                  {transaction?.items && transaction?.items.length > 0 ? (
+                    transaction.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                        <span className="text-white/90 font-medium">{item.nome_cliente}</span>
+                        <span className="text-primary font-bold">{formatCurrency(item.valor)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                      <span className="text-white/90 font-medium">{transaction?.nome_cliente || "-"}</span>
+                      <span className="text-primary font-bold">{formatCurrency(transaction?.valor_liberado)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {transaction?.descricao && (

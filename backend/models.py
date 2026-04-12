@@ -20,6 +20,22 @@ class User(Base):
     transactions = relationship("Transaction", back_populates="parceiro")
     auth_tokens = relationship("AuthToken", back_populates="user")
 
+class TransactionItem(Base):
+    __tablename__ = "transaction_items"
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"))
+    nome_cliente = Column(String(255), nullable=False)
+    valor = Column(Float, nullable=False)
+    
+    transaction = relationship("Transaction", back_populates="items")
+
+class EmailTemplate(Base):
+    __tablename__ = "email_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    status = Column(String(50), unique=True, index=True) # AGUARDANDO_NOTA, PAGO, FINALIZADO, etc
+    subject = Column(String(255), nullable=False)
+    body = Column(String(5000), nullable=False)
+
 class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True, index=True)
@@ -53,6 +69,7 @@ class Transaction(Base):
 
     # Relationships
     parceiro = relationship("User", back_populates="transactions")
+    items = relationship("TransactionItem", back_populates="transaction", cascade="all, delete-orphan")
 
 class AuthToken(Base):
     __tablename__ = "auth_tokens"

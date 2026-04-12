@@ -90,6 +90,39 @@ class UserResponse(UserBase):
     class Config:
         from_attributes = True
 
+# Transaction Item Schemas
+class TransactionItemBase(BaseModel):
+    nome_cliente: str
+    valor: Decimal
+
+class TransactionItemCreate(TransactionItemBase):
+    pass
+
+class TransactionItemResponse(TransactionItemBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# Email Template Schemas
+class EmailTemplateBase(BaseModel):
+    status: str
+    subject: str
+    body: str
+
+class EmailTemplateCreate(EmailTemplateBase):
+    pass
+
+class EmailTemplateResponse(EmailTemplateBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+class EmailPreviewResponse(BaseModel):
+    to: str
+    subject: str
+    body: str
+    magic_link: str
+
 # Transaction Schemas
 class TransactionBase(BaseModel):
     parceiro_id: int
@@ -105,14 +138,16 @@ class TransactionBase(BaseModel):
     notas_fiscais: List[str] = Field(default_factory=list)
     zip_contabilidade_url: Optional[str] = None
     parceiro_nome: Optional[str] = None
+    items: List[TransactionItemResponse] = []
 
 class TransactionCreate(TransactionBase):
     parceiro_id: int
     ano: int
     mes: int
     dia: int
-    nome_cliente: str
+    nome_cliente: Optional[str] = None # Backwards compatibility
     valor_liberado: Decimal
+    items: List[TransactionItemCreate] = [] # New multi-client support
 
 class TransactionResponse(TransactionBase):
     id: int
