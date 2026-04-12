@@ -10,8 +10,10 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     telefone = Column(String(30), nullable=True)
     tipo = Column(Enum("SUPERADMIN", "ADMIN", "PARCEIRO", name="user_type"), default="PARCEIRO")
-    cnpj_cpf = Column(String(20), unique=True, nullable=False)
+    cnpj_cpf = Column(String(20), unique=True, nullable=True) # Mantendo legibilidade, mas agora documento é o foco
+    documento = Column(String(18), unique=True, index=True, nullable=True)
     password = Column(String(50), nullable=True)
+    password_updated = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     
     # Relationships

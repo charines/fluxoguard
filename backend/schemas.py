@@ -27,8 +27,10 @@ class UserBase(BaseModel):
     email: EmailStr
     telefone: Optional[str] = None
     tipo: UserType = UserType.PARCEIRO
-    cnpj_cpf: str
+    cnpj_cpf: Optional[str] = None
+    documento: Optional[str] = None
     is_active: bool = True
+    password_updated: bool = False
 
 class UserCreate(UserBase):
     pass
@@ -39,6 +41,13 @@ class AdminRegisterRequest(BaseModel):
     telefone: str
     documento_cnpj_cpf: str
     tipo: UserType = UserType.ADMIN
+
+class RegisterUserRequest(BaseModel):
+    nome: str
+    email: EmailStr
+    tipo: UserType = UserType.PARCEIRO
+    documento: Optional[str] = None
+    telefone: Optional[str] = None
 
 class UnifiedLoginRequest(BaseModel):
     identifier: str
@@ -52,8 +61,10 @@ class AuthUserProfile(BaseModel):
     nome: str
     email: EmailStr
     tipo: UserType
-    cnpj_cpf: str
+    cnpj_cpf: Optional[str]
+    documento: Optional[str]
     is_active: bool
+    password_updated: bool
 
 class LoginResponse(BaseModel):
     access_token: str
@@ -68,7 +79,9 @@ class UserUpdateRequest(BaseModel):
     email: Optional[EmailStr] = None
     telefone: Optional[str] = None
     cnpj_cpf: Optional[str] = None
+    documento: Optional[str] = None
     password: Optional[str] = None
+    password_updated: Optional[bool] = None
 
 class UserResponse(UserBase):
     id: int

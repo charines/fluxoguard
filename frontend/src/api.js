@@ -60,6 +60,21 @@ export const login = async ({ identifier, code }) => {
   return response.data;
 };
 
+export const checkAvailability = async (params) => {
+  const response = await api.get('/users/check-availability', {
+    params,
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
+export const registerUser = async (payload) => {
+  const response = await api.post('/users/register', payload, {
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
 export const updateUserActive = async (userId, isActive) => {
   const response = await api.patch(
     `/users/${userId}/active`,

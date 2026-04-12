@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Form, Query
+from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Form, Query, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -365,18 +365,24 @@ def normalize_money(value: Decimal) -> float:
 
 
 def find_user_for_login(identifier: str, db: Session) -> User:
+    print(f"[AUTH] Buscando usuário para ID: '{identifier}'")
     user_by_email = db.query(User).filter(User.email == identifier).first()
     if user_by_email:
+        print(f"[AUTH] Encontrado por e-mail: {user_by_email.email} (Tipo: {user_by_email.tipo})")
         if user_by_email.tipo == "PARCEIRO":
-            raise HTTPException(status_code=401, detail="PARCEIRO deve logar com CNPJ")
+            print(f"[AUTH ERROR] Bloqueio: PARCEIRO tentando logar com e-mail.")
+            raise HTTPException(status_code=401, detail="Parceiros devem logar utilizando o Documento (CPF/CNPJ).")
         return user_by_email
 
     user_by_cnpj = db.query(User).filter(User.cnpj_cpf == identifier).first()
     if user_by_cnpj:
+        print(f"[AUTH] Encontrado por CNPJ: {user_by_cnpj.cnpj_cpf} (Tipo: {user_by_cnpj.tipo})")
         if user_by_cnpj.tipo in ["ADMIN", "SUPERADMIN"]:
-            raise HTTPException(status_code=401, detail="ADMIN/SUPERADMIN devem logar com Email")
+            print(f"[AUTH ERROR] Bloqueio: ADMIN/SUPERADMIN tentando logar com CNPJ.")
+            raise HTTPException(status_code=401, detail="Administradores devem logar utilizando o E-mail.")
         return user_by_cnpj
 
+    print(f"[AUTH ERROR] Usuário não localizado para: '{identifier}'")
     raise HTTPException(status_code=401, detail="Usuário não encontrado")
 
 
@@ -384,9 +390,13 @@ def find_user_for_login(identifier: str, db: Session) -> User:
 def login(payload: schemas.UnifiedLoginRequest, db: Session = Depends(get_db)):
     user = find_user_for_login(payload.identifier.strip(), db)
 
-    # Verifica se a senha enviada coincide com a armazenada
-    if payload.code != user.password:
-        raise HTTPException(status_code=401, detail="Código inválido")
+    # Verifica se a senha enviada coincide com a armazenada (ignorando hifens para resiliência UI)
+    sent_code = payload.code.strip().replace("-", "")
+    stored_code = user.password.strip().replace("-", "")
+    
+    if sent_code != stored_code:
+        print(f"[AUTH ERROR] Código inválido fornecido para: {user.email}")
+        raise HTTPException(status_code=401, detail="Código de acesso inválido")
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Acesso negado. Usuário inativo.")
@@ -409,7 +419,9 @@ def login(payload: schemas.UnifiedLoginRequest, db: Session = Depends(get_db)):
             "email": user.email,
             "tipo": user.tipo,
             "cnpj_cpf": user.cnpj_cpf,
+            "documento": user.documento,
             "is_active": user.is_active,
+            "password_updated": user.password_updated,
         },
     }
 
@@ -457,7 +469,9 @@ def magic_login(payload: schemas.MagicLoginRequest, db: Session = Depends(get_db
                 "email": user.email,
                 "tipo": user.tipo,
                 "cnpj_cpf": user.cnpj_cpf,
-                "is_active": user.is_active
+                "documento": user.documento,
+                "is_active": user.is_active,
+                "password_updated": user.password_updated
             }
         }
     except HTTPException as he:
@@ -542,7 +556,96 @@ def register_admin(
     db.commit()
     db.refresh(new_user)
     return new_user
+def post_registration_tasks(user_id: int):
+    """
+    Simula processos secundários que rodam em background.
+    Ex: Criar pastas no Supabase, enviar email de boas-vindas, registrar logs externos.
+    """
+    print(f"[JOB] Executando tarefas pós-cadastro para usuário {user_id}")
+    # Aqui entraria a lógica de 'criar pastas no Supabase' se fosse necessário
+    pass
 
+@app.get("/users/check-availability")
+def check_availability(
+    email: Optional[str] = None,
+    documento: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    if email:
+        existing = db.query(User).filter(User.email == email).first()
+        if existing:
+            return {"available": False, "reason": "E-mail já cadastrado"}
+    
+    if documento:
+        # Check both documento and legacy cnpj_cpf fields
+        existing = db.query(User).filter(
+            (User.documento == documento) | (User.cnpj_cpf == documento)
+        ).first()
+        if existing:
+            return {"available": False, "reason": "DOCUMENTO_DUPLICADO"}
+            
+    return {"available": True}
+
+@app.post("/users/register", response_model=schemas.UserResponse, status_code=201)
+async def register_user_job(
+    payload: schemas.RegisterUserRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # RBAC: Role-Based Access Control
+    if current_user.tipo == "PARCEIRO":
+        raise HTTPException(status_code=403, detail="Acesso negado. Parceiros não podem criar novos usuários.")
+
+    if payload.tipo in ["ADMIN", "SUPERADMIN"] and current_user.tipo != "SUPERADMIN":
+        raise HTTPException(status_code=403, detail="Acesso Negado. Apenas Super-Administradores podem promover novos gestores.")
+
+    # Verificação de duplicidade de E-mail
+    existing_email = db.query(User).filter(User.email == payload.email).first()
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Ops! Este e-mail já faz parte da nossa base. Tente recuperar a senha ou use outro e-mail.")
+
+    # Verificação de duplicidade de Documento
+    if payload.documento:
+        existing_doc = db.query(User).filter(
+            (User.documento == payload.documento) | (User.cnpj_cpf == payload.documento)
+        ).first()
+        if existing_doc:
+            raise HTTPException(status_code=400, detail="Ops! Este CPF/CNPJ já cadastrado com outro usuário.")
+
+    if payload.tipo == "PARCEIRO" and not payload.documento:
+         raise HTTPException(status_code=422, detail="O campo Documento (CPF/CNPJ) é obrigatório para o perfil de Parceiro.")
+
+    # Geração de senha automática
+    generated_password = generate_dynamic_password()
+    
+    # Persistência atômica no MySQL
+    new_user = User(
+        nome=payload.nome,
+        email=payload.email,
+        telefone=payload.telefone,
+        tipo=payload.tipo,
+        documento=payload.documento,
+        cnpj_cpf=payload.documento, # Sincronizando para compatibilidade legada
+        password=generated_password,
+        password_updated=False,
+        is_active=True
+    )
+    
+    try:
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao salvar usuário: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao salvar dados. Tente novamente.")
+
+    # Agenda tarefas secundárias para o background
+    background_tasks.add_task(post_registration_tasks, new_user.id)
+
+    # Resposta garantida e imediata com a senha plana (exibida apenas uma vez no onboarding)
+    return new_user
 
 @app.patch("/users/{user_id}/active", response_model=schemas.UserResponse)
 def update_user_active_status(
