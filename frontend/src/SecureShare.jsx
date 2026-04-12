@@ -34,6 +34,7 @@ const SecureShare = () => {
   const [error, setError] = useState(null);
   const [transaction, setTransaction] = useState(null);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [notaNumero, setNotaNumero] = useState('');
   const token = searchParams.get('token');
   const fileInputRef = useRef(null);
 
@@ -174,6 +175,13 @@ const SecureShare = () => {
   const handleUploadNF = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
+    const numero = (notaNumero || '').trim();
+
+    if (!numero) {
+      alert('Informe o número da nota fiscal antes de enviar.');
+      e.target.value = '';
+      return;
+    }
 
     if (files.some(f => !f.name.toLowerCase().endsWith('.pdf'))) {
       alert('Apenas arquivos PDF são aceitos para Nota Fiscal.');
@@ -183,6 +191,7 @@ const SecureShare = () => {
     setLoading(true);
     try {
       const formData = new FormData();
+      formData.append('nota_numero', numero);
       files.forEach(f => formData.append('notas_fiscais', f));
 
       const response = await api.patch(`/transactions/${transaction.id}/upload-nf`, formData, {
@@ -192,6 +201,7 @@ const SecureShare = () => {
         }
       });
       setTransaction(response.data);
+      setNotaNumero('');
       alert('Nota fiscal enviada com sucesso! O status foi atualizado.');
     } catch (err) {
       alert(err?.response?.data?.detail || 'Erro ao enviar nota fiscal.');
@@ -306,6 +316,18 @@ const SecureShare = () => {
                 {/* Upload NF Button for AGUARDANDO_NF */}
                 {transaction?.status === 'AGUARDANDO_NF' && (
                   <div className="relative">
+                    <div className="mb-3">
+                      <label className="text-[10px] text-primary font-bold uppercase tracking-wider block mb-1">
+                        Número da Nota Fiscal
+                      </label>
+                      <input
+                        type="text"
+                        value={notaNumero}
+                        onChange={(e) => setNotaNumero(e.target.value)}
+                        placeholder="Ex: 12345"
+                        className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      />
+                    </div>
                     <input 
                       type="file" 
                       ref={fileInputRef}
@@ -315,8 +337,9 @@ const SecureShare = () => {
                       className="hidden"
                     />
                     <button 
+                      disabled={!notaNumero.trim()}
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex items-center justify-between p-5 bg-primary/10 border-2 border-dashed border-primary/30 rounded-2xl hover:bg-primary/20 hover:border-primary/50 transition-all group"
+                      className="w-full flex items-center justify-between p-5 bg-primary/10 border-2 border-dashed border-primary/30 rounded-2xl hover:bg-primary/20 hover:border-primary/50 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <div className="flex items-center gap-4">
                         <div className="p-3 bg-primary rounded-xl text-white shadow-lg shadow-primary/20">

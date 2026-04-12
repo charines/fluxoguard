@@ -125,8 +125,9 @@ export const getMyTransactions = async () => {
   return response.data;
 };
 
-export const uploadNotasFiscais = async (transactionId, files) => {
+export const uploadNotasFiscais = async (transactionId, files, notaNumero) => {
   const formData = new FormData();
+  formData.append('nota_numero', notaNumero);
   files.forEach((file) => formData.append('notas_fiscais', file));
 
   const response = await api.patch(`/transactions/${transactionId}/upload-nf`, formData, {

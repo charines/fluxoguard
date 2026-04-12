@@ -21,6 +21,19 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 # Initialize Supabase Client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+
+def sanitize_filename_prefix(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    safe = []
+    for ch in str(value).strip():
+        if ch.isalnum() or ch in ["-", "_"]:
+            safe.append(ch)
+        else:
+            safe.append("_")
+    normalized = "".join(safe).strip("_")
+    return normalized[:50]
+
 def validate_file(file: UploadFile):
     """
     Validate if file is PDF or Image and max 500 KB.
@@ -86,7 +99,7 @@ async def upload_nota_fiscal(transaction_id: int, user_id: int, file: UploadFile
              raise HTTPException(status_code=400, detail="Este arquivo já existe no storage.")
         raise HTTPException(status_code=500, detail=f"Erro no upload para Supabase: {error_msg}")
 
-async def upload_file_to_supabase(file: UploadFile, subfolder: str = ""):
+async def upload_file_to_supabase(file: UploadFile, subfolder: str = "", filename_prefix: Optional[str] = None):
     """
     Generic upload to Supabase storage.
     """
@@ -97,9 +110,12 @@ async def upload_file_to_supabase(file: UploadFile, subfolder: str = ""):
     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     unique_id = os.urandom(4).hex()
     ext = os.path.splitext(file.filename)[1].lower()
+    safe_prefix = sanitize_filename_prefix(filename_prefix)
     
     # Organize in subfolder if provided
     filename = f"{timestamp}_{unique_id}{ext}"
+    if safe_prefix:
+        filename = f"{safe_prefix}_{filename}"
     storage_path = f"{subfolder}/{filename}" if subfolder else filename
     
     try:

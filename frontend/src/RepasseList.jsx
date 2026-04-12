@@ -90,6 +90,7 @@ const RepasseList = ({ onStatsChange }) => {
 
   const [extraComprovantesMap, setExtraComprovantesMap] = useState({})
   const [nfMap, setNfMap] = useState({})
+  const [nfNumberMap, setNfNumberMap] = useState({})
 
   const [selectedMap, setSelectedMap] = useState({})
   const [processingBatch, setProcessingBatch] = useState(false)
@@ -540,8 +541,13 @@ const RepasseList = ({ onStatsChange }) => {
 
   const submitNf = async (tx) => {
     const filesToSend = nfMap[tx.id] || []
+    const notaNumero = (nfNumberMap[tx.id] || '').trim()
     if (filesToSend.length === 0) {
       alert('Selecione ao menos 1 arquivo de NF.')
+      return
+    }
+    if (!notaNumero) {
+      alert('Informe o número da nota fiscal.')
       return
     }
     if (filesToSend.length > 5) {
@@ -550,9 +556,10 @@ const RepasseList = ({ onStatsChange }) => {
     }
 
     try {
-      const updated = await uploadNotasFiscais(tx.id, filesToSend)
+      const updated = await uploadNotasFiscais(tx.id, filesToSend, notaNumero)
       setRows((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
       setNfMap((prev) => ({ ...prev, [tx.id]: [] }))
+      setNfNumberMap((prev) => ({ ...prev, [tx.id]: '' }))
     } catch (err) {
       alert(err?.response?.data?.detail || 'Erro ao enviar notas fiscais.')
     }
@@ -1205,6 +1212,15 @@ const RepasseList = ({ onStatsChange }) => {
                   <p className="text-xs text-muted-foreground">
                     {modalCount}/5 enviado(s) — Pode enviar mais {modalRemaining}
                   </p>
+                  {!isComp && (
+                    <input
+                      type="text"
+                      value={nfNumberMap[modalTx.id] || ''}
+                      onChange={(e) => setNfNumberMap((prev) => ({ ...prev, [modalTx.id]: e.target.value }))}
+                      placeholder="Número da nota fiscal (obrigatório)"
+                      className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  )}
                   <input
                     type="file"
                     multiple
@@ -1219,7 +1235,12 @@ const RepasseList = ({ onStatsChange }) => {
                     }}
                     disabled={isComp
                       ? (!extraComprovantesMap[modalTx.id] || extraComprovantesMap[modalTx.id]?.length === 0 || extraComprovantesMap[modalTx.id]?.length > modalRemaining)
-                      : (!nfMap[modalTx.id] || nfMap[modalTx.id]?.length === 0 || nfMap[modalTx.id]?.length > 5)
+                      : (
+                        !nfMap[modalTx.id] ||
+                        nfMap[modalTx.id]?.length === 0 ||
+                        nfMap[modalTx.id]?.length > 5 ||
+                        !(nfNumberMap[modalTx.id] || '').trim()
+                      )
                     }
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
                   >

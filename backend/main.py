@@ -1069,6 +1069,7 @@ def my_transactions(
 @app.patch("/transactions/{transaction_id}/upload-nf")
 async def upload_nf(
     transaction_id: int,
+    nota_numero: str = Form(...),
     notas_fiscais: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
@@ -1105,6 +1106,8 @@ async def upload_nf(
         raise HTTPException(status_code=400, detail="Envie ao menos 1 arquivo.")
     if len(notas_fiscais) > 5:
         raise HTTPException(status_code=400, detail="Máximo de 5 notas fiscais.")
+    if not (nota_numero or "").strip():
+        raise HTTPException(status_code=400, detail="Informe o número da nota fiscal.")
 
     for item in notas_fiscais:
         if not (item.filename or "").lower().endswith(".pdf"):
@@ -1120,7 +1123,10 @@ async def upload_nf(
     if tx.status not in ["LIBERADO", "AGUARDANDO_NF", "DIVERGENCIA", "AGUARDANDO_APROVACAO"]:
         raise HTTPException(status_code=400, detail="Status atual não permite envio de NF")
 
-    nf_paths = await save_upload_files_supabase(notas_fiscais, "notas_fiscais")
+    nf_paths: List[str] = []
+    for file in notas_fiscais:
+        path = await upload_file_to_supabase(file, "notas_fiscais", filename_prefix=nota_numero)
+        nf_paths.append(path)
     tx.notas_fiscais_json = json.dumps(nf_paths)
     tx.status = "AGUARDANDO_APROVACAO"
     db.commit()
