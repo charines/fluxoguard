@@ -866,16 +866,16 @@ def generate_email_context(tx: Transaction, status: str, db: Session):
     
     defaults = {
         "AGUARDANDO_NF": {
-            "subject": "Solicitação de Nota Fiscal - FluxoGuard",
-            "body": "Olá {parceiro}, você tem um repasse total de {total}. Clientes inclusos:\n{lista_clientes_valores}\n\nPor favor, anexe a NF no link: {magic_link}"
+            "subject": "Solicitação de Nota Fiscal",
+            "body": "Olá, segue a solicitação referente à transação.\n\n--- CLIENTES E VALORES ---\n{lista_clientes_valores}\nTotal: {total}\n\nPor favor, anexe a NF no link: {magic_link}"
         },
         "PAGO": {
-            "subject": "Comprovante de Pagamento - FluxoGuard",
-            "body": "Olá {parceiro}, seu pagamento foi realizado. Baixe o comprovante aqui: {magic_link}"
+            "subject": "Pagamento Confirmado",
+            "body": "Olá, o pagamento foi realizado.\n\n--- CLIENTES E VALORES ---\n{lista_clientes_valores}\nTotal: {total}\n\nAcesse os comprovantes no link: {magic_link}"
         },
         "FINALIZADO": {
-            "subject": "Repasse Finalizado - FluxoGuard",
-            "body": "Olá {parceiro}, o processo foi concluído. Solicite os downloads ao financeiro."
+            "subject": "Processo Finalizado",
+            "body": "Olá, o processo da transação foi concluído.\n\n--- CLIENTES E VALORES ---\n{lista_clientes_valores}\nTotal: {total}"
         }
     }
     
@@ -891,7 +891,6 @@ def generate_email_context(tx: Transaction, status: str, db: Session):
     total_format = f"R$ {tx.valor_liberado:,.2f}"
     
     body = tpl_data["body"].format(
-        parceiro=tx.parceiro.nome,
         total=total_format,
         lista_clientes_valores=items_list,
         magic_link=magic_link
